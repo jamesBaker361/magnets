@@ -1,6 +1,7 @@
 import numpy as np
-from scipy.integrate import tplquad
+from scipy.integrate import tplquad,quad
 import time
+import numpy as np
 
 # Constants
 mu_0 = 4 * np.pi * 1e-7  # Permeability of free space (T·m/A)
@@ -45,7 +46,7 @@ def compute_magnetic_field(rx, ry, rz, L):
 
     for component in range(3):  # Integrate each component of B
         print(":)")
-        result, _ = tplquad(
+        result,_ = tplquad(
             lambda r_wire, phi, z: biot_savart_integrand(r_wire, phi, z, rx, ry, rz, component),
             0, L,  # z limits
             lambda z: 0, lambda z: 2 * np.pi,  # phi limits
@@ -55,9 +56,40 @@ def compute_magnetic_field(rx, ry, rz, L):
 
     return B
 
+def calculate_length(h,num_points=1000):
+    def dr_dz(z):
+        dz = h/ num_points
+        return (r(z + dz) - r(z)) / dz
+
+    def integrand(z):
+        dr = dr_dz(z)
+        r_val = r(z)
+        n_val = n(z)
+        return np.sqrt(1 + dr**2 + (r_val**2) * (2 * np.pi * n_val)**2)
+    
+    # Perform the integration
+    length, _ = quad(integrand, 0, h)
+    return length
+
 # Example: Compute B at point (0.1, 0, 0.5) for a solenoid of length 1.0 m
-L = 1.0  # Length of the solenoid (m)
+h=1
+L = calculate_length(h)  # Length of the solenoid (m)
 rx, ry, rz = 0.1, 0.0, 0.5  # Field point (m)
+
+def get_function(param_list,sinusoidal=True):
+
+    def f(z):
+        if sinusoidal:
+            assert len(param_list)%2==0
+            value=0
+            for i in range(0,param_list,2):
+                a=param_list[i]
+                b=param_list[i+1]
+                value+=a*np.cos(i *z)
+                value+=b*np.sin(i*z)
+        else:
+            value=sum([param * z**degree for degree,param in enumerate(param_list)])
+        return value
 
 start=time.time()
 B = compute_magnetic_field(rx, ry, rz, L)
