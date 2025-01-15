@@ -103,7 +103,7 @@ if __name__=="__main__":
 
     degree=args.degree
     sinusoidal=args.sinusoidal
-
+    beginning=time.time()
     with open(os.path.join(data_folder, f"{random_letters}.csv"),"w+") as file:
         file.write(f"{degree},{sinusoidal}\n")
 
@@ -127,5 +127,6 @@ if __name__=="__main__":
             end=time.time()
             elapsed=round(end-start,3)
             line=",".join(map(str,[elapsed,L,x,y,z,B[0],B[1],B[2]]+r_list+n_list+t_list))
-            print(line)
+            file.write(f"{line}\n")
             #print(f"Magnetic field at ({rx}, {ry}, {rz}): Bx = {B[0]:.6e} T, By = {B[1]:.6e} T, Bz = {B[2]:.6e} T elapsed {end -start} seconds")
+    print(f"all done time elapsed {end-beginning}")
