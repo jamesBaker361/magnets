@@ -2,20 +2,15 @@ import numpy as np
 from scipy.integrate import tplquad,quad
 import time
 import numpy as np
+import os
+import random
+import string
+import argparse
 
 # Constants
 mu_0 = 4 * np.pi * 1e-7  # Permeability of free space (T·m/A)
 I = 1.0  # Current in the solenoid (A)
 
-# Solenoid parameters
-def r(z):
-    return 0.05 + 0.01 * z  # Radius as a function of z (m)
-
-def t(z):
-    return 0.001 + 0.0002 * z  # Wire thickness as a function of z (m)
-
-def n(z):
-    return 1000 * np.exp(-0.1 * z)  # Turns per unit length as a function of z
 
 # Biot-Savart integrand for each component of B
 def biot_savart_integrand(r_wire, phi, z, rx, ry, rz, component):
@@ -41,11 +36,11 @@ def biot_savart_integrand(r_wire, phi, z, rx, ry, rz, component):
     return cross[component] / r_mag**3
 
 # Magnetic field computation at (rx, ry, rz)
-def compute_magnetic_field(rx, ry, rz, L):
+def compute_magnetic_field(rx, ry, rz, L,r,n,t):
     B = np.zeros(3)  # Initialize magnetic field components
 
     for component in range(3):  # Integrate each component of B
-        print(":)")
+
         result,_ = tplquad(
             lambda r_wire, phi, z: biot_savart_integrand(r_wire, phi, z, rx, ry, rz, component),
             0, L,  # z limits
@@ -56,7 +51,7 @@ def compute_magnetic_field(rx, ry, rz, L):
 
     return B
 
-def calculate_length(h,num_points=1000):
+def calculate_length(h,n,num_points=1000):
     def dr_dz(z):
         dz = h/ num_points
         return (r(z + dz) - r(z)) / dz
@@ -72,11 +67,10 @@ def calculate_length(h,num_points=1000):
     return length
 
 # Example: Compute B at point (0.1, 0, 0.5) for a solenoid of length 1.0 m
-h=1
-L = calculate_length(h)  # Length of the solenoid (m)
-rx, ry, rz = 0.1, 0.0, 0.5  # Field point (m)
 
-def get_function(param_list,sinusoidal=True):
+
+
+def get_function(param_list,sinusoidal=False):
 
     def f(z):
         if sinusoidal:
@@ -91,7 +85,47 @@ def get_function(param_list,sinusoidal=True):
             value=sum([param * z**degree for degree,param in enumerate(param_list)])
         return value
 
-start=time.time()
-B = compute_magnetic_field(rx, ry, rz, L)
-end=time.time()
-print(f"Magnetic field at ({rx}, {ry}, {rz}): Bx = {B[0]:.6e} T, By = {B[1]:.6e} T, Bz = {B[2]:.6e} T elapsed {end -start} seconds")
+    return f
+
+if __name__=="__main__":
+
+    parser=argparse.ArgumentParser()
+    parser.add_argument("--n_trials",type=int,default=1000)
+    parser.add_argument("--degree",type=int,default=6)
+    parser.add_argument("--sinusoidal",action="store_true")
+
+    args=parser.parse_args()
+
+    n_trials=args.n_trials
+    data_folder="simulation_data"
+    os.makedirs(data_folder,exist_ok=True)
+    random_letters = ''.join(random.choices(string.ascii_letters, k=5))
+
+    degree=args.degree
+    sinusoidal=args.sinusoidal
+
+    with open(os.path.join(data_folder, f"{random_letters}.csv"),"w+") as file:
+        file.write(f"{degree},{sinusoidal}\n")
+
+        for trial in range(n_trials):
+            #get random points
+            x,y,z=[random.uniform(0,1) for _ in range(3)]
+
+            r_list=[random.uniform(0,1) for _ in range(degree)]
+            n_list=[random.uniform(0,100) for _ in range(degree)]
+            t_list=[random.uniform(0,0.01) for _ in range(degree)]
+
+            r=get_function(n_list)
+            n=get_function(r_list)
+            t=get_function(t_list)
+
+            h=1
+            L = calculate_length(h,n)  # Length of the solenoid (m)
+
+            start=time.time()
+            B = compute_magnetic_field(x,y,z, L,r,n,t)
+            end=time.time()
+            elapsed=round(end-start,3)
+            line=",".join(map(str,[elapsed,L,x,y,z,B[0],B[1],B[2]]+r_list+n_list+t_list))
+            print(line)
+            #print(f"Magnetic field at ({rx}, {ry}, {rz}): Bx = {B[0]:.6e} T, By = {B[1]:.6e} T, Bz = {B[2]:.6e} T elapsed {end -start} seconds")
