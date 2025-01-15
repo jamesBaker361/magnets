@@ -1,68 +1,65 @@
-
-'''
-
-input parameters:
-Length
-n(z)=(n_0,n_1,,,) for sinusoidal/polynomial approximation 
-r(z)=(r_0,r_1,,,)
-wire diameter
-current
-x,y,z
-
-output parameters:
-material used
-power dissipation
-B strength at any point
-'''
-
-
-import time
 import numpy as np
-from scipy.integrate import quad
-import matplotlib.pyplot as plt
+from scipy.integrate import tplquad
+import time
 
 # Constants
-mu_0 = 4 * np.pi * 1e-7  # Permeability of free space in T·m/A
+mu_0 = 4 * np.pi * 1e-7  # Permeability of free space (T·m/A)
+I = 1.0  # Current in the solenoid (A)
 
-# Example solenoid parameters
-def n(z):
-    """Number of turns per unit length as a function of z (can be a constant or a function)."""
-    # For example, a constant number of turns per unit length
-    return 1000  # turns per meter
-
+# Solenoid parameters
 def r(z):
-    """Radius of the solenoid as a function of z (can be a constant or a function)."""
-    # For example, a constant radius
-    return 0.01  # meters (1 cm)
+    return 0.05 + 0.01 * z  # Radius as a function of z (m)
 
-def magnetic_field_contribution(z, x, y, n_func, r_func, I):
-    """Calculate the magnetic field contribution at point (x, y, z) from a segment at z'."""
-    r_z = r_func(z)
-    n_z = n_func(z)
-    
-    # Calculate the distance from the segment at z' to the point (x, y, z)
-    R = np.sqrt(x**2 + y**2 + (z - z)**2)  # Distance from the current element to the point
-    
-    # Biot-Savart law contribution (simplified for magnetic field along the z-axis)
-    B_z = (mu_0 * n_z * I) / (2 * np.pi * R**2) * (x**2 + y**2)**0.5
-    return B_z
+def t(z):
+    return 0.001 + 0.0002 * z  # Wire thickness as a function of z (m)
 
-def compute_magnetic_field(x, y, z, z1, z2, n_func, r_func, I):
-    """Compute the total magnetic field at point (x, y, z) by integrating over the solenoid."""
-    # Integrating along the length of the solenoid from z1 to z2
-    B_z, _ = quad(magnetic_field_contribution, z1, z2, args=(x, y, n_func, r_func, I))
-    return B_z
+def n(z):
+    return 1000 * np.exp(-0.1 * z)  # Turns per unit length as a function of z
 
-# Example usage
-I = 1.0  # Current in amperes
-z1, z2 = 0, 1  # Length of the solenoid (from z1 to z2)
+# Biot-Savart integrand for each component of B
+def biot_savart_integrand(r_wire, phi, z, rx, ry, rz, component):
+    # Source position in cylindrical coordinates
+    x_source = r_wire * np.cos(phi)
+    y_source = r_wire * np.sin(phi)
+    z_source = z
 
-# Point where the magnetic field is calculated
-x, y, z = 0.005, 0.005, 0.5  # Point (x, y, z) in meters
+    # Relative vector
+    r_vec = np.array([rx - x_source, ry - y_source, rz - z_source])
+    r_mag = np.linalg.norm(r_vec)
 
-# Compute the magnetic field at point (x, y, z)
+    if r_mag == 0:
+        return 0  # Avoid singularity at the observation point
+
+    # Current density
+    A_wire = np.pi / 4 * t(z)**2
+    J_mag = I / A_wire
+    J = J_mag * np.array([-np.sin(phi), np.cos(phi), 0])  # Azimuthal direction
+
+    # Biot-Savart cross product
+    cross = np.cross(J, r_vec)
+    return cross[component] / r_mag**3
+
+# Magnetic field computation at (rx, ry, rz)
+def compute_magnetic_field(rx, ry, rz, L):
+    B = np.zeros(3)  # Initialize magnetic field components
+
+    for component in range(3):  # Integrate each component of B
+        print(":)")
+        result, _ = tplquad(
+            lambda r_wire, phi, z: biot_savart_integrand(r_wire, phi, z, rx, ry, rz, component),
+            0, L,  # z limits
+            lambda z: 0, lambda z: 2 * np.pi,  # phi limits
+            lambda z,p: r(z), lambda z,p: r(z) + t(z)  # r_wire limits
+        )
+        B[component] = mu_0 / (4 * np.pi) * result
+
+    return B
+
+# Example: Compute B at point (0.1, 0, 0.5) for a solenoid of length 1.0 m
+L = 1.0  # Length of the solenoid (m)
+rx, ry, rz = 0.1, 0.0, 0.5  # Field point (m)
+
 start=time.time()
-B = compute_magnetic_field(x, y, z, z1, z2, n, r, I)
+B = compute_magnetic_field(rx, ry, rz, L)
 end=time.time()
-print(f"Magnetic field at point ({x}, {y}, {z}) is: {B} Tesla elapsed {end-start}")
-
+print(f"Magnetic field at ({rx}, {ry}, {rz}): Bx = {B[0]:.6e} T, By = {B[1]:.6e} T, Bz = {B[2]:.6e} T elapsed {end -start} seconds")
