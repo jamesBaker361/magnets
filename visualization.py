@@ -20,19 +20,20 @@ def generate_coil(z_min, z_max, num_pointsr,r=r,n=n):
     y = r(z) * np.sin(theta)  # Y-coordinates
     return x, y, z
 
-# Generate the coil path
-z_min, z_max, num_points = 0, 10, 1000
-x, y, z = generate_coil(z_min, z_max, num_points)
+if __name__=="__main__":
+    # Generate the coil path
+    z_min, z_max, num_points = 0, 10, 1000
+    x, y, z = generate_coil(z_min, z_max, num_points)
 
-# Plot the coil
-fig = plt.figure(figsize=(10, 8))
-ax = fig.add_subplot(111, projection='3d')
-ax.plot(x, y, z, lw=2, label="Coil Path")
-ax.set_xlabel("X-axis")
-ax.set_ylabel("Y-axis")
-ax.set_zlabel("Z-axis")
-ax.set_title("3D Coil Model")
-plt.legend()
-output_file = "3d_coil_model.png"
-plt.savefig(output_file, dpi=300, bbox_inches="tight")  # Save with high resolution
+    # Plot the coil
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot(x, y, z, lw=2, label="Coil Path")
+    ax.set_xlabel("X-axis")
+    ax.set_ylabel("Y-axis")
+    ax.set_zlabel("Z-axis")
+    ax.set_title("3D Coil Model")
+    plt.legend()
+    output_file = "3d_coil_model.png"
+    plt.savefig(output_file, dpi=300, bbox_inches="tight")  # Save with high resolution
 print(f"Figure saved as {output_file}")
