@@ -5,6 +5,7 @@ from torch import nn
 import torch.optim as optim
 import time
 import numpy as np
+import wandb
 
 parser=argparse.ArgumentParser()
 parser.add_argument("--limit",type=int,default=100)
@@ -12,6 +13,7 @@ parser.add_argument("--epochs",type=int,default=10)
 parser.add_argument("--batch_size",type=int,default=4)
 parser.add_argument("--lr",type=float,default=0.001)
 parser.add_argument("--validation",action="store_true")
+parser.add_argument("--project_name",type=str,default="magnetism")
 
 def get_model(n_inputs:int)-> torch.nn.Sequential:
     return torch.nn.Sequential(*[
@@ -33,6 +35,11 @@ if __name__=="__main__":
     #load data
     data_folder="fake_simulation_data"
     os.makedirs(data_folder,exist_ok=True)
+
+    wandb.init(
+    project=args.project_name,  # Change to your project name
+    config=vars(args)
+    )
 
     rows=[]
     for  f in os.listdir(data_folder):
@@ -77,8 +84,9 @@ if __name__=="__main__":
             loss.backward()        # Backpropagation
             optimizer.step()       # Update weights
             loss_list.append(loss.detach()/args.batch_size)
-        print(f"epoch {e} ended after {time.time()-start} seconds w avg loss {np.mean(loss_list)}")
-        
+        train_loss=np.mean(loss_list)
+        print(f"epoch {e} ended after {time.time()-start} seconds w avg loss {train_loss}")
+        wandb.log({"train_loss":train_loss})
         if args.validation:
             val_loss_list=[]
 
@@ -91,7 +99,9 @@ if __name__=="__main__":
                     loss=criterion(predicted,output_data)
 
                     val_loss_list.append(loss/args.batch_size)
-                print(f"validation epoch {e} ended after {time.time()-start} seconds w avg loss {np.mean(val_loss_list)}")
+                val_loss=np.mean(val_loss_list)
+                print(f"validation epoch {e} ended after {time.time()-start} seconds w avg loss {val_loss}")
+                wandb.log({"val_loss":val_loss})
         
     test_loss_list=[]
     with torch.no_grad():
@@ -102,4 +112,6 @@ if __name__=="__main__":
             loss=criterion(predicted,output_data)
             test_loss_list.append(loss/args.batch_size)
 
-    print(f"test loss {np.mean(test_loss_list)}")
+    test_loss=np.mean(test_loss_list)
+    print(f"test loss {test_loss}")
+    wandb.log({"test_loss":test_loss})
