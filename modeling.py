@@ -118,5 +118,5 @@ if __name__=="__main__":
     test_loss=np.mean(test_loss_list)
     print(f"test loss {test_loss}")
     wandb.log({"test_loss":test_loss})
-
+    os.makedirs(args.save_folder, exist_ok=True)
     torch.save(model.state_dict(), os.path.join(args.save_folder, args.name))
