@@ -15,6 +15,8 @@ parser.add_argument("--lr",type=float,default=0.001)
 parser.add_argument("--validation",action="store_true")
 parser.add_argument("--project_name",type=str,default="magnetism")
 parser.add_argument("--data_folder",type=str,default="fake_simulation_data")
+parser.add_argument("--save_folder",type=str,default="/scratch/jlb638/magnet_model")
+parser.add_argument("--name",type=str,default="model.pth")
 
 def get_model(n_inputs:int)-> torch.nn.Sequential:
     return torch.nn.Sequential(*[
@@ -116,3 +118,5 @@ if __name__=="__main__":
     test_loss=np.mean(test_loss_list)
     print(f"test loss {test_loss}")
     wandb.log({"test_loss":test_loss})
+
+    torch.save(model.state_dict(), os.path.join(args.save_folder, args.name))
