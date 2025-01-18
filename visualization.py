@@ -10,7 +10,7 @@ def t(z):
     return 0.05 + 0.01 * np.cos(z)  # Example: thickness varies with cosine wave
 
 def n(z):
-    return 5 + z * 0.5  # Example: turns per length increases linearly
+    return 1+ z * 0.1  # Example: turns per length increases linearly
 
 # Generate coil geometry
 def generate_coil(z_min, z_max, num_points,r=r,n=n):
