@@ -28,7 +28,7 @@ if __name__=="__main__":
     # Plot the coil
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot(x, y, z, lw=2, label="Coil Path")
+    ax.plot(x, y, z, lw=2, label="Coil Path",color="red")
     ax.set_xlabel("X-axis")
     ax.set_ylabel("Y-axis")
     ax.set_zlabel("Z-axis")
