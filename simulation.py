@@ -111,7 +111,7 @@ if __name__=="__main__":
             #get random points
             x,y,z=[random.uniform(0,1) for _ in range(3)]
 
-            r_list=[random.uniform(0,1) for _ in range(degree)]
+            r_list=[random.uniform(0,0.5) for _ in range(degree)]
             n_list=[random.uniform(0,100) for _ in range(degree)]
             t_list=[random.uniform(0,0.01) for _ in range(degree)]
 
