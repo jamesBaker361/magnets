@@ -36,4 +36,4 @@ if __name__=="__main__":
     plt.legend()
     output_file = "3d_coil_model.png"
     plt.savefig(output_file, dpi=300, bbox_inches="tight")  # Save with high resolution
-print(f"Figure saved as {output_file}")
+    print(f"Figure saved as {output_file}")
