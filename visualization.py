@@ -13,7 +13,7 @@ def n(z):
     return 5 + z * 0.5  # Example: turns per length increases linearly
 
 # Generate coil geometry
-def generate_coil(z_min, z_max, num_pointsr,r=r,n=n):
+def generate_coil(z_min, z_max, num_points,r=r,n=n):
     z = np.linspace(z_min, z_max, num_points)  # Height of the coil
     theta = np.cumsum(2 * np.pi * n(z) * np.gradient(z))  # Angle for turns
     x = r(z) * np.cos(theta)  # X-coordinates
