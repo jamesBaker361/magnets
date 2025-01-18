@@ -14,6 +14,7 @@ parser.add_argument("--batch_size",type=int,default=4)
 parser.add_argument("--lr",type=float,default=0.001)
 parser.add_argument("--validation",action="store_true")
 parser.add_argument("--project_name",type=str,default="magnetism")
+parser.add_argument("--data_folder",type=str,default="fake_simulation_data")
 
 def get_model(n_inputs:int)-> torch.nn.Sequential:
     return torch.nn.Sequential(*[
@@ -33,12 +34,12 @@ if __name__=="__main__":
     args=parser.parse_args()
 
     #load data
-    data_folder="fake_simulation_data"
+    data_folder=args.data_folder
     os.makedirs(data_folder,exist_ok=True)
 
     wandb.init(
-    project=args.project_name,  # Change to your project name
-    config=vars(args)
+        project=args.project_name,
+        config=vars(args)
     )
 
     rows=[]
