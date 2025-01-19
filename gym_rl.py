@@ -32,7 +32,12 @@ class MagneticOptimizationEnv(gym.Env):
             predicted=self.model(torch.tensor([x,y,z]+params))
             loss-=np.linalg.norm(np.array([b_x,b_y,b_z]) - np.array(predicted))
 
-        radius_function=get_function()
+        radius_function=get_function(params[:6])
+
+        result = minimize_scalar(radius_function, bounds=(0, 1), method='bounded')
+
+        if result<self.radius_min:
+            loss-=1000
         return loss
     
     def step(self,action):
@@ -41,7 +46,7 @@ class MagneticOptimizationEnv(gym.Env):
         reward=self.calculate_loss(action)
 
         self.step_count+=1
-        if self.step_count>=self.max_steps or reward>=0.000001:
+        if self.step_count>=self.max_steps or reward>=-0.00001:
             terminated=True
         else:
             terminated=False
