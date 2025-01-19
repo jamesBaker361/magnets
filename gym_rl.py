@@ -5,26 +5,27 @@ from modeling import get_model
 import numpy as np
 from scipy.optimize import minimize_scalar
 from simulation import get_function
+from stable_baselines3 import PPO
+import time
 
 class MagneticOptimizationEnv(gym.Env):
-    def __init__(self,target_values:dict,state_dict_path:str,max_steps:int=500,radius_min:float=0.1):
+    def __init__(self,target_values:dict,state_dict_path:str,radius_min:float=0.1):
         super(MagneticOptimizationEnv,self).__init__()
 
-        self.upper_limits=[0.5 for _ in range(6)]+[100 for _ in range(6)]+[0.01 for _ in range(6)]
+        self.upper_limits=np.array([0.5 for _ in range(6)]+[100 for _ in range(6)]+[0.01 for _ in range(6)])
 
         self.radius_min=radius_min
 
-        self.action_space=spaces.Box(low=[0.0 for _ in range(18)],high=self.upper_limits)
+        self.action_space=spaces.Box(low=np.array([0.0 for _ in range(18)]),high=self.upper_limits)
 
         self.target_values=target_values
 
-        self.observation_space=spaces.Box(low=[-10000]+[0.0 for _ in range(18)],high=[0]+self.upper_limits)
+        self.observation_space=spaces.Box(low=np.array([-10000]+[0.0 for _ in range(18)]),high=np.concatenate([0],self.upper_limits))
 
         self.model=get_model(21)
 
         self.model.load_state_dict(torch.load(state_dict_path))
-        self.step_count=0
-        self.max_steps=max_steps
+
 
     def calculate_loss(self,params:list):
         loss=0.0
@@ -45,8 +46,7 @@ class MagneticOptimizationEnv(gym.Env):
         action=np.clip(action, [0 for _ in range(18)], self.upper_limits)
         reward=self.calculate_loss(action)
 
-        self.step_count+=1
-        if self.step_count>=self.max_steps or reward>=-0.00001:
+        if reward>=-0.00001:
             terminated=True
         else:
             terminated=False
@@ -57,3 +57,13 @@ class MagneticOptimizationEnv(gym.Env):
 
         observation=[reward]
         return observation, reward, terminated, truncated, info
+
+
+if __name__=="__main__":
+    target_values=[[0.5,0.5,float(z)/10, 0,0,1] for z in range(10)] 
+    env=MagneticOptimizationEnv(target_values,"/scratch/jlb638/magnet_model/test_model.pth")
+    # Train PPO agent
+    model = PPO("MlpPolicy", env, verbose=1)
+    start=time.time()
+    model.learn(total_timesteps=500)
+    print(f"elapsed {time.time()-start} seconds")
