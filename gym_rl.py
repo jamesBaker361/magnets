@@ -37,7 +37,7 @@ class MagneticOptimizationEnv(gym.Env):
         result = minimize_scalar(radius_function, bounds=(0, 1), method='bounded')
 
         if result<self.radius_min:
-            loss-=1000
+            loss=-10000
         return loss
     
     def step(self,action):
