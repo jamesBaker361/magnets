@@ -9,7 +9,7 @@ import argparse
 
 # Constants
 mu_0 = 4 * np.pi * 1e-7  # Permeability of free space (T·m/A)
-I = 1.0  # Current in the solenoid (A)
+I = 10.0  # Current in the solenoid (A)
 
 
 # Biot-Savart integrand for each component of B
