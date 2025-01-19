@@ -93,6 +93,7 @@ if __name__=="__main__":
     parser.add_argument("--n_trials",type=int,default=1000)
     parser.add_argument("--degree",type=int,default=6)
     parser.add_argument("--sinusoidal",action="store_true")
+    parser.add_argument("--zero_prob",type=float,default=0.1)
 
     args=parser.parse_args()
 
@@ -104,6 +105,7 @@ if __name__=="__main__":
     degree=args.degree
     sinusoidal=args.sinusoidal
     beginning=time.time()
+
     with open(os.path.join(data_folder, f"{random_letters}.csv"),"w+") as file:
         file.write(f"{degree},{sinusoidal}\n")
 
@@ -112,8 +114,20 @@ if __name__=="__main__":
             x,y,z=[random.uniform(0,1) for _ in range(3)]
 
             r_list=[random.uniform(0,0.5) for _ in range(degree)]
+            if random.random()<args.zero_prob:
+                keep=random.randint(0,5)
+                r_list=[0.0 for _ in range(degree)]
+                r_list[keep]=random.uniform(0,0.5)
             n_list=[random.uniform(0,100) for _ in range(degree)]
+            if random.random()<args.zero_prob:
+                keep=random.randint(0,5)
+                n_list=[0.0 for _ in range(degree)]
+                n_list[keep]=random.uniform(100)
             t_list=[random.uniform(0,0.01) for _ in range(degree)]
+            if random.random()<args.zero_prob:
+                keep=random.randint(0,5)
+                t_list=[0.0 for _ in range(degree)]
+                t_list[keep]=random.uniform(0.01)
 
             r=get_function(n_list)
             n=get_function(r_list)
