@@ -19,8 +19,8 @@ class MagneticOptimizationEnv(gym.Env):
         self.action_space=spaces.Box(low=np.array([0.0 for _ in range(18)]),high=self.upper_limits)
 
         self.target_values=target_values
-
-        self.observation_space=spaces.Box(low=np.array([-10000]+[0.0 for _ in range(18)]),high=np.concatenate(np.array([0.0]),self.upper_limits))
+        obs_upper_limits=[0]+[0.5 for _ in range(6)]+[100 for _ in range(6)]+[0.01 for _ in range(6)]
+        self.observation_space=spaces.Box(low=np.array([-10000]+[0.0 for _ in range(18)]),high=obs_upper_limits)
 
         self.model=get_model(21)
 
