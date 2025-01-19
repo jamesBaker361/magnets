@@ -20,7 +20,7 @@ class MagneticOptimizationEnv(gym.Env):
 
         self.target_values=target_values
 
-        self.observation_space=spaces.Box(low=np.array([-10000]+[0.0 for _ in range(18)]),high=np.concatenate([0],self.upper_limits))
+        self.observation_space=spaces.Box(low=np.array([-10000]+[0.0 for _ in range(18)]),high=np.concatenate(np.array([0.0]),self.upper_limits))
 
         self.model=get_model(21)
 
@@ -34,11 +34,19 @@ class MagneticOptimizationEnv(gym.Env):
             loss-=np.linalg.norm(np.array([b_x,b_y,b_z]) - np.array(predicted))
 
         radius_function=get_function(params[:6])
+        test_radius_minimum = minimize_scalar(radius_function, bounds=(0, 1), method='bounded')
+        if test_radius_minimum<self.radius_min:
+            return -10000
 
-        result = minimize_scalar(radius_function, bounds=(0, 1), method='bounded')
-
-        if result<self.radius_min:
-            loss=-10000
+        n_turn_function=get_function(params[6:12])
+        test_n_turns=minimize_scalar(n_turn_function,bounds=(0, 1), method='bounded')
+        if test_n_turns<0:
+            return -10000
+        
+        thickness_function=get_function(params[12:])
+        test_thickness=minimize_scalar(thickness_function, bounds=(0,1), method="bounded")
+        if test_thickness<0:
+            return -10000
         return loss
     
     def step(self,action):
