@@ -35,16 +35,24 @@ def biot_savart_integrand(r_wire, phi, z, rx, ry, rz, component,I,thickness):
     cross = np.cross(J, r_vec)
     return cross[component] / r_mag**3
 
+def phi_function(z,offset=0):
+    #print(z)
+    #print(int(len(phi_list)*float(z)/z_max))
+    index=offset+int((len(phi_list)-1)*float(z)/z_max)
+    return phi_list[index]
+
+
 # Magnetic field computation at (rx, ry, rz)
 def compute_magnetic_field(rx, ry, rz, L,r,n,thickness,I,phi_list,z_max):
+    #print("L",L)
     B = np.zeros(3)  # Initialize magnetic field components
     z_max=float(z_max)
     for component in range(3):  # Integrate each component of B
 
         result,_ = tplquad(
             lambda r_wire, phi, z: biot_savart_integrand(r_wire, phi, z, rx, ry, rz, component,I,thickness),
-            0, L,  # z limits
-            lambda z: phi_list[int(len(phi_list)*float(z)/z_max)], lambda z: phi_list[1+int(len(phi_list)*float(z)/z_max)],  # phi limits
+            0, z_max,  # z limits
+            lambda z: phi_function(z), lambda z: phi_function(z,1),  # phi limits
             lambda z,p: r(z), lambda z,p: r(z) + thickness, # r_wire limits
             epsabs=1e-12, 
             epsrel=1e-12
@@ -134,7 +142,7 @@ if __name__=="__main__":
             if random.random()<args.zero_prob:
                 keep=random.randint(0,5)
                 n_list=[0.0 for _ in range(degree)]
-                n_list[keep]=random.uniform(100)
+                n_list[keep]=random.uniform(0,100)
             thickness=random.uniform(0,0.005)
             I=random.uniform(0,10)
 
