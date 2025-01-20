@@ -9,11 +9,11 @@ import argparse
 
 # Constants
 mu_0 = 4 * np.pi * 1e-7  # Permeability of free space (T·m/A)
-I = 10.0  # Current in the solenoid (A)
+
 
 
 # Biot-Savart integrand for each component of B
-def biot_savart_integrand(r_wire, phi, z, rx, ry, rz, component):
+def biot_savart_integrand(r_wire, phi, z, rx, ry, rz, component,I,thickness):
     # Source position in cylindrical coordinates
     x_source = r_wire * np.cos(phi)
     y_source = r_wire * np.sin(phi)
@@ -27,7 +27,7 @@ def biot_savart_integrand(r_wire, phi, z, rx, ry, rz, component):
         return 0  # Avoid singularity at the observation point
 
     # Current density
-    A_wire = np.pi / 4 * t(z)**2
+    A_wire = np.pi / 4 * thickness**2
     J_mag = I / A_wire
     J = J_mag * np.array([-np.sin(phi), np.cos(phi), 0])  # Azimuthal direction
 
@@ -36,22 +36,24 @@ def biot_savart_integrand(r_wire, phi, z, rx, ry, rz, component):
     return cross[component] / r_mag**3
 
 # Magnetic field computation at (rx, ry, rz)
-def compute_magnetic_field(rx, ry, rz, L,r,n,t):
+def compute_magnetic_field(rx, ry, rz, L,r,n,thickness,I,phi_list,z_max):
     B = np.zeros(3)  # Initialize magnetic field components
-
+    z_max=float(z_max)
     for component in range(3):  # Integrate each component of B
 
         result,_ = tplquad(
-            lambda r_wire, phi, z: biot_savart_integrand(r_wire, phi, z, rx, ry, rz, component),
+            lambda r_wire, phi, z: biot_savart_integrand(r_wire, phi, z, rx, ry, rz, component,I,thickness),
             0, L,  # z limits
-            lambda z: 0, lambda z: 2 * np.pi,  # phi limits
-            lambda z,p: r(z), lambda z,p: r(z) + t(z)  # r_wire limits
+            lambda z: phi_list[int(len(phi_list)*float(z)/z_max)], lambda z: phi_list[1+int(len(phi_list)*float(z)/z_max)],  # phi limits
+            lambda z,p: r(z), lambda z,p: r(z) + thickness, # r_wire limits
+            epsabs=1e-12, 
+            epsrel=1e-12
         )
         B[component] = mu_0 / (4 * np.pi) * result
 
     return B
 
-def calculate_length(h,n,num_points=1000):
+def calculate_length(h,n,r,num_points=1000):
     def dr_dz(z):
         dz = h/ num_points
         return (r(z + dz) - r(z)) / dz
@@ -86,6 +88,16 @@ def get_function(param_list,sinusoidal=False):
         return value
 
     return f
+
+# Function to calculate the phi list
+def get_phi_list(z_max, steps, n):
+    output = [0]
+    z_max = float(z_max)
+    z_step = z_max / steps
+    for z in range(1,steps+1):
+        norm_z = z * z_step
+        output.append((2 * np.pi * n(norm_z) / steps)+output[-1])
+    return output
 
 if __name__=="__main__":
 
@@ -123,24 +135,22 @@ if __name__=="__main__":
                 keep=random.randint(0,5)
                 n_list=[0.0 for _ in range(degree)]
                 n_list[keep]=random.uniform(100)
-            t_list=[random.uniform(0,0.01) for _ in range(degree)]
-            if random.random()<args.zero_prob:
-                keep=random.randint(0,5)
-                t_list=[0.0 for _ in range(degree)]
-                t_list[keep]=random.uniform(0.01)
+            thickness=random.uniform(0,0.005)
+            I=random.uniform(0,10)
 
             r=get_function(n_list)
             n=get_function(r_list)
-            t=get_function(t_list)
 
-            h=1
-            L = calculate_length(h,n)  # Length of the solenoid (m)
+            z_max=1
+            L = calculate_length(z_max,n,r)  # Length of the solenoid (m)
+
+            phi_list=get_phi_list(z_max,10000,n)
 
             start=time.time()
-            B = compute_magnetic_field(x,y,z, L,r,n,t)
+            B = compute_magnetic_field(x,y,z, L,r,n,thickness,I,phi_list,z_max=z_max)
             end=time.time()
             elapsed=round(end-start,3)
-            line=",".join(map(str,[elapsed,L,x,y,z,B[0],B[1],B[2]]+r_list+n_list+t_list))
+            line=",".join(map(str,[elapsed,L,x,y,z,B[0],B[1],B[2],I,thickness]+r_list+n_list))
             file.write(f"{line}\n")
             #print(f"Magnetic field at ({rx}, {ry}, {rz}): Bx = {B[0]:.6e} T, By = {B[1]:.6e} T, Bz = {B[2]:.6e} T elapsed {end -start} seconds")
     print(f"all done time elapsed {end-beginning}")
