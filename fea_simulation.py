@@ -40,9 +40,7 @@ def solve_magnetic_field(mesh_file, point, current_density, permeability):
     gamma1 = domain.create_region('Gamma1',
                                   'vertices in x < %.10f' % (min_x + eps),
                                   'facet')
-    gamma2 = domain.create_region('Gamma2',
-                                  'vertices in x > %.10f' % (max_x - eps),
-                                  'facet')
+    
 
     field = Field.from_args('fu', np.float64, 'vector', omega,
                             approx_order=2)
