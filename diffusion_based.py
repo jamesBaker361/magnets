@@ -28,6 +28,7 @@ Ekin = 10*ONE_EV
 import argparse
 parser=argparse.ArgumentParser()
 parser.add_argument("max_fourier_mode",type=int,default=1)
+parser.add_argument("n_coils",type=int,default=4)
 
 
 def calculate_reward(observation:list,nozzle_radius:int):
@@ -105,7 +106,9 @@ class Denoiser(torch.nn.Module):
 
 
 
+
 def main(args):
+    n_features=
     return
 
 if __name__=="__main__":
