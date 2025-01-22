@@ -24,6 +24,11 @@ m = PROTON_MASS
 q = ELEMENTARY_CHARGE
 Ekin = 10*ONE_EV
 
+import argparse
+parser=argparse.ArgumentParser()
+parser.add_argument("max_fourier_mode",type=int,default=1)
+
+
 def calculate_reward(observation:list,nozzle_radius:int):
     reward=0.0
     counts=0
@@ -35,7 +40,7 @@ def calculate_reward(observation:list,nozzle_radius:int):
     return reward,counts
 
 def evaluate_fourier(fourier_coefficients:list,
-                     max_fourier_n:int,
+                     max_fourier_mode:int,
                      start_positions:list,
                      start_velocities:list,
                      stopping_criteria:list,
@@ -43,8 +48,8 @@ def evaluate_fourier(fourier_coefficients:list,
     n_coils=len(fourier_coefficients)
     coil_list=[]
     for f_c in fourier_coefficients:
-        curve = CurveXYZFourier(1000, max_fourier_n)
-        all_fourier=np.concatenate(f_c, [0 for 0 in range(2*max_fourier_n)-1])
+        curve = CurveXYZFourier(1000, max_fourier_mode)
+        all_fourier=np.concatenate(f_c, [0 for 0 in range(2*max_fourier_mode)-1])
         curve.x=all_fourier
         coil = Coil(curve, Current(AMPS)) 
         coil_list.append(coil)
@@ -58,3 +63,24 @@ def evaluate_fourier(fourier_coefficients:list,
 
     return reward
 
+class Denoiser(torch.nn.Module):
+    def __init__(self, n_features:int, n_layers:int,residuals:bool):
+        super().__init__()
+        self.n_features=n_features
+        self.n_layers=n_layers
+        self.residuals =residuals
+
+        diff=n_features//2 
+        n_node_list=[]
+
+
+        
+
+
+
+def main(args):
+    return
+
+if __name__=="__main__":
+    args=parser.parse_args()
+    main(args)
