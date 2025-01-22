@@ -18,6 +18,7 @@ from simsopt.field import Current, Coil
 from simsopt.field import BiotSavart
 import matplotlib.pyplot as plt 
 from simsopt.field.tracing import MinZStoppingCriterion, MaxRStoppingCriterion,MaxZStoppingCriterion
+from torch.nn import Linear,Sequential
 
 AMPS=1000
 m = PROTON_MASS
@@ -64,17 +65,43 @@ def evaluate_fourier(fourier_coefficients:list,
     return reward
 
 class Denoiser(torch.nn.Module):
-    def __init__(self, n_features:int, n_layers:int,residuals:bool):
+    def __init__(self, n_features:int, n_layers:int,residuals:bool,increasing:bool):
         super().__init__()
         self.n_features=n_features
         self.n_layers=n_layers
         self.residuals =residuals
 
-        diff=n_features//2 
-        n_node_list=[]
-
-
+        diff=n_features/n_layers
+        layer_list=[]
+        prev=n_features
+        for n in range(n_layers//2):
+            if increasing:
+                current=prev+diff
+            else:
+                current=prev-diff
+            layer_list.append(Linear(prev,current))
+            prev=current
         
+        if increasing:
+            layer_list.append(Linear(prev,n_features*2))
+            prev=n_features*2
+        else:
+            layer_list.append(Linear(prev,n_features//2))
+            prev=n_features//2
+
+
+        for n in range(n_layers//2):
+            if increasing:
+                current=prev-diff
+            else:
+                current=prev+diff
+            layer_list.append(Linear(prev,current))
+            prev=current
+
+        self.model=Sequential(*layer_list)
+
+    def forward(self,x):
+        return self.model(x)
 
 
 
