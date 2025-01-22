@@ -1,3 +1,4 @@
+print("began importing")
 import gymnasium as gym
 import torch
 from gymnasium import spaces
@@ -17,10 +18,12 @@ from simsopt.field import Current, Coil
 from simsopt.field import BiotSavart
 import matplotlib.pyplot as plt 
 from simsopt.field.tracing import MinZStoppingCriterion, MaxRStoppingCriterion,MaxZStoppingCriterion
+print("done importing!")
 
 class MagneticOptimizationEnv(gym.Env):
     def __init__(self,start_positions:list,start_velocities:list,n_coils:int,max_fourier_n:int,nozzle_radius:float,radius:float,regularization_lambda:float):
         super(MagneticOptimizationEnv,self).__init__()
+        print("began constucting")
         start_positions=np.array(start_positions)
         self.start_positions=start_positions #places where we might start a particle
         self.start_velocities=start_velocities
@@ -41,26 +44,25 @@ class MagneticOptimizationEnv(gym.Env):
         
         #self.observation_space=spaces.Box(low=lower_limits,high=upper_limits)
         self.action_space=spaces.Box(low=lower_limits,high=upper_limits)
-        particles_upper_limits=[1]+[1 for _ in range(3)]+[10000 for _ in range(3)] #distance and velocity vectors
-        particles_lower_limits=[0]+[-1 for _ in range(3)]+[-10000 for _ in range(3)]
+        particles_upper_limits=[1 for _ in range(3)]+[100 for _ in range(3)] #distance and velocity vectors
+        particles_lower_limits=[-1 for _ in range(3)]+[-100 for _ in range(3)]
         self.observation_space=spaces.Box(low=np.concatenate([particles_lower_limits for _ in range(n_particles)]),
             high=np.concatenate([particles_upper_limits for _ in range(n_particles)])
         )
-
+        self.runtime_error_count=0
 
     def calculate_reward(self,observation:list):
         reward=0.0
         counts=0
-        for [t,x,y,z,v_x,v_y,v_z] in observation:
+        for [x,y,z,v_x,v_y,v_z] in observation:
             if np.linalg.norm([x,y])< self.nozzle_radius and z>=1:
                 reward+=v_z #for each particle, that is in the nozzle, we want as much z momentumas possible
                 counts+=1
+        print("found rewards")
         return reward,counts
     
     def step(self,action):
 
-        #action=np.clip(action, [0 for _ in range(18)], self.upper_limits)
-        #calculate particle locations
         coil_list=[]
         regularization=0
         for c in range(self.n_coils):
@@ -73,17 +75,26 @@ class MagneticOptimizationEnv(gym.Env):
             curve.x =new_x  # Set Fourier amplitudes
             coil = Coil(curve, Current(coil_parameters[-1]))  # 10 kAmpere-turns
             coil_list.append(coil)
-
+        #print("made coils")
         field=BiotSavart(coil_list)
-        field=InterpolatedField(field,4,[0,1,100],[0,2*np.pi,100],[0,1,100])
+        #print("calculated field")
+        #field=InterpolatedField(field,4,[0,1,100],[0,2*np.pi,100],[0,1,100])
+        #print("interpolated field")
         m = PROTON_MASS
         q = ELEMENTARY_CHARGE
         Ekin = 10*ONE_EV
-        res_tys,res_phi_hits=trace_particles(field,self.start_positions,self.start_velocities,mass=m,charge=q,Ekin=Ekin,mode="full",forget_exact_path=True,
-                                             stopping_criteria=[MaxZStoppingCriterion(1),MinZStoppingCriterion(0), MaxRStoppingCriterion(self.radius)])
-        
-        observation=[rt[-1] for rt in res_tys]
-        reward,counts=self.calculate_reward(observation)
+        #print("time to trace particles")
+        try:
+            res_tys,res_phi_hits=trace_particles(field,self.start_positions,self.start_velocities,mass=m,charge=q,Ekin=Ekin,mode="full",forget_exact_path=True,
+                                                stopping_criteria=[MaxZStoppingCriterion(1),MinZStoppingCriterion(0), MaxRStoppingCriterion(self.radius)])
+            
+            #print("successfully traced particles :)))")
+            observation=[rt[-1][1:] for rt in res_tys]
+            reward,counts=self.calculate_reward(observation)
+        except RuntimeError:
+            reward=0
+            self.runtime_error_count+=1
+            observation=[[0 for _ in range(6)] for ___ in range(self.n_particles)]
 
         reward-=regularization        
 
@@ -93,7 +104,7 @@ class MagneticOptimizationEnv(gym.Env):
 
         truncated=False
         info={}
-
+        observation=np.concatenate(observation)
         
         return observation, reward, terminated, truncated, info
 
@@ -103,11 +114,15 @@ class MagneticOptimizationEnv(gym.Env):
 
 if __name__=="__main__":
     #target_values=[[0.5,0.5,float(z)/10, 0,0,1] for z in range(10)] 
+    print("making env???")
     env=MagneticOptimizationEnv(
         [[0,0,.1]],[1],2,1,0.25,1,0.001
     )
     # Train PPO agent
+    print("made env")
     model = PPO("MlpPolicy", env, verbose=1)
+    print("made model")
     start=time.time()
     model.learn(total_timesteps=2)
+    print("errors",env.runtime_error_count)
     print(f"elapsed {time.time()-start} seconds")
