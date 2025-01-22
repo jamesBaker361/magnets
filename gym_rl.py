@@ -7,6 +7,17 @@ from scipy.optimize import minimize_scalar
 from simulation import get_function
 from stable_baselines3 import PPO
 import time
+from simsopt.field import ToroidalField
+from simsopt.geo import CurveXYZFourier
+from simsopt.util.constants import PROTON_MASS, ELEMENTARY_CHARGE, ONE_EV
+from simsopt.field import trace_particles_starting_on_curve,trace_particles
+# NOTE: Most of the functions and classes implemented in the tracing
+# NOTE: submodule can be imported directly from the field module
+import numpy as np
+from simsopt.geo import CurveXYZFourier
+from simsopt.field import Current, Coil
+from simsopt.field import BiotSavart
+import matplotlib.pyplot as plt 
 
 class MagneticOptimizationEnv(gym.Env):
     def __init__(self,target_values:dict,state_dict_path:str,radius_min:float=0.1):
