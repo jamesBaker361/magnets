@@ -21,6 +21,7 @@ from simsopt.field.tracing import MinZStoppingCriterion, MaxRStoppingCriterion,M
 class MagneticOptimizationEnv(gym.Env):
     def __init__(self,start_positions:list,start_velocities:list,n_coils:int,max_fourier_n:int,nozzle_radius:float,radius:float,regularization_lambda:float):
         super(MagneticOptimizationEnv,self).__init__()
+        start_positions=np.array(start_positions)
         self.start_positions=start_positions #places where we might start a particle
         self.start_velocities=start_velocities
         self.n_coils=n_coils #how many coils
@@ -31,17 +32,17 @@ class MagneticOptimizationEnv(gym.Env):
         self.n_particles=n_particles
         self.regularization_lambda=regularization_lambda
 
-        self.parameters_per_coil=2+(2*max_fourier_n)+2 #constant x,y + cos,sin for each mode x,y + z + current
-        upper_limits_per_coil=[1.0]+[1.0 for _ in range(2*max_fourier_n)] +[1.0]+[10000]
+        self.parameters_per_coil=2+(4*max_fourier_n)+2 #constant x,y + cos,sin for each mode x,y + z + current
+        upper_limits_per_coil=[1.0,1.0]+[1.0 for _ in range(4*max_fourier_n)] +[1.0]+[10000]
         upper_limits=np.concatenate([upper_limits_per_coil for _ in range(n_coils)])
-        lower_limits_per_coil=[0.]+[0.0 for _ in range(2*max_fourier_n)]+[0.]+[100]
+        lower_limits_per_coil=[0.,0.]+[0.0 for _ in range(4*max_fourier_n)]+[0.]+[100]
         lower_limits=np.concatenate([lower_limits_per_coil for _ in range(n_coils)])
 
         
         #self.observation_space=spaces.Box(low=lower_limits,high=upper_limits)
         self.action_space=spaces.Box(low=lower_limits,high=upper_limits)
-        particles_upper_limits=[1 for _ in range(3)]+[10000 for _ in range(3)] #distance and velocity vectors
-        particles_lower_limits=[-1 for _ in range(3)]+[-10000 for _ in range(3)]
+        particles_upper_limits=[1]+[1 for _ in range(3)]+[10000 for _ in range(3)] #distance and velocity vectors
+        particles_lower_limits=[0]+[-1 for _ in range(3)]+[-10000 for _ in range(3)]
         self.observation_space=spaces.Box(low=np.concatenate([particles_lower_limits for _ in range(n_particles)]),
             high=np.concatenate([particles_upper_limits for _ in range(n_particles)])
         )
@@ -66,13 +67,15 @@ class MagneticOptimizationEnv(gym.Env):
             coil_parameters=action[c:c+self.parameters_per_coil]
             curve = CurveXYZFourier(1000, self.max_fourier_n)  # 100 = Number of quadrature points, 1 = max Fourier mode number
             fourier_amplitudes=coil_parameters[:-2]
-            regularization+=self.regularization_lambda*[f**2 for f in fourier_amplitudes]
-            curve.x = fourier_amplitudes+ coil_parameters[-2]+[0. for _ in range(2*self.max_fourier_n)]  # Set Fourier amplitudes
+            regularization+=self.regularization_lambda*sum([f**2 for f in fourier_amplitudes])
+            z=coil_parameters[-2]
+            new_x=np.concatenate((fourier_amplitudes, [z],[0. for _ in range(2*self.max_fourier_n)]) )
+            curve.x =new_x  # Set Fourier amplitudes
             coil = Coil(curve, Current(coil_parameters[-1]))  # 10 kAmpere-turns
             coil_list.append(coil)
 
-        field=BiotSavart([coil_list])
-        field=InterpolatedField(field)
+        field=BiotSavart(coil_list)
+        field=InterpolatedField(field,4,[0,1,100],[0,2*np.pi,100],[0,1,100])
         m = PROTON_MASS
         q = ELEMENTARY_CHARGE
         Ekin = 10*ONE_EV
@@ -94,6 +97,9 @@ class MagneticOptimizationEnv(gym.Env):
         
         return observation, reward, terminated, truncated, info
 
+    def reset(self,seed):
+        return np.random.normal(0.5,size=(self.n_particles,7)),{}
+
 
 if __name__=="__main__":
     #target_values=[[0.5,0.5,float(z)/10, 0,0,1] for z in range(10)] 
@@ -103,5 +109,5 @@ if __name__=="__main__":
     # Train PPO agent
     model = PPO("MlpPolicy", env, verbose=1)
     start=time.time()
-    model.learn(total_timesteps=50)
+    model.learn(total_timesteps=2)
     print(f"elapsed {time.time()-start} seconds")
