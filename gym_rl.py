@@ -1,10 +1,8 @@
 import gymnasium as gym
 import torch
 from gymnasium import spaces
-from modeling import get_model
 import numpy as np
 from scipy.optimize import minimize_scalar
-from simulation import get_function
 from stable_baselines3 import PPO
 import time
 from simsopt.field import ToroidalField
@@ -20,62 +18,39 @@ from simsopt.field import BiotSavart
 import matplotlib.pyplot as plt 
 
 class MagneticOptimizationEnv(gym.Env):
-    def __init__(self,target_values:dict,state_dict_path:str,radius_min:float=0.1):
+    def __init__(self,start_positions:list,n_coils:int,max_fourier_n:int,nozzle_radius:float,radius:float,n_particles:int):
         super(MagneticOptimizationEnv,self).__init__()
+        self.start_positions=start_positions #places where we might start a particle
+        self.n_coils=n_coils #how many coils
+        self.max_fourier_n=max_fourier_n
+        self.nozzle_radius=nozzle_radius
+        self.radius=radius
+        self.n_particles-n_particles
 
-        self.upper_limits=np.array([0.5 for _ in range(6)]+[100 for _ in range(6)]+[0.01 for _ in range(6)])
+        parameters_per_coil=1+(2*max_fourier_n)+2 #constant + cos,sin for each mode + z + current
+        upper_limits_per_coil=[1.0]+[1.0 for _ in range(2*max_fourier_n)] +[1.0]+[10000]
+        upper_limits=np.concatenate([upper_limits_per_coil for _ in range(n_coils)])
+        lower_limits_per_coil=[0.]+[0.0 for _ in range(2*max_fourier_n)]+[0.]+[100]
+        lower_limits=np.concatenate([lower_limits_per_coil for _ in range(n_coils)])
 
-        self.radius_min=radius_min
-
-        self.action_space=spaces.Box(low=np.array([0.0 for _ in range(18)]),high=self.upper_limits)
-
-        self.target_values=target_values
-        obs_upper_limits=[0]+[0.5 for _ in range(6)]+[100 for _ in range(6)]+[0.01 for _ in range(6)]
-        self.observation_space=spaces.Box(low=np.array([-10000]+[0.0 for _ in range(18)]),high=obs_upper_limits)
-
-        self.model=get_model(21)
-
-        self.model.load_state_dict(torch.load(state_dict_path))
-
-
-    def calculate_loss(self,params:list):
-        loss=0.0
-        for [x,y,z,b_x,b_y,b_z] in self.target_values:
-            predicted=self.model(torch.tensor([x,y,z]+params))
-            loss-=np.linalg.norm(np.array([b_x,b_y,b_z]) - np.array(predicted))
-
-        radius_function=get_function(params[:6])
-        test_radius_minimum = minimize_scalar(radius_function, bounds=(0, 1), method='bounded')
-        if test_radius_minimum<self.radius_min:
-            return -10000
-
-        n_turn_function=get_function(params[6:12])
-        test_n_turns=minimize_scalar(n_turn_function,bounds=(0, 1), method='bounded')
-        if test_n_turns<0:
-            return -10000
         
-        thickness_function=get_function(params[12:])
-        test_thickness=minimize_scalar(thickness_function, bounds=(0,1), method="bounded")
-        if test_thickness<0:
-            return -10000
-        return loss
+        #self.observation_space=spaces.Box(low=lower_limits,high=upper_limits)
+        self.action_space=spaces.Box(low=lower_limits,high=upper_limits)
+        particles_upper_limits=[1 for _ in range(3)]+[10000 for _ in range(3)] #distance and velocity vectors
+        particles_lower_limits=[-1 for _ in range(3)]+[-10000 for _ in range(3)]
+        self.observation_space=spaces.Box(low=np.concatenate([particles_lower_limits for _ in range(n_particles)]),
+            high=np.concatenate([particles_upper_limits for _ in range(n_particles)])
+        )
+
+
+    def calculate_loss(self,observation:list):
+        return
     
     def step(self,action):
 
-        action=np.clip(action, [0 for _ in range(18)], self.upper_limits)
-        reward=self.calculate_loss(action)
-
-        if reward>=-0.00001:
-            terminated=True
-        else:
-            terminated=False
+        #action=np.clip(action, [0 for _ in range(18)], self.upper_limits)
         
-        
-        info={}
-        truncated=False
-
-        observation=[reward]
-        return observation, reward, terminated, truncated, info
+        return #observation, reward, terminated, truncated, info
 
 
 if __name__=="__main__":
