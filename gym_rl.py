@@ -57,7 +57,7 @@ class MagneticOptimizationEnv(gym.Env):
             if np.linalg.norm([x,y])< self.nozzle_radius and z>=1:
                 reward+=v_z #for each particle, that is in the nozzle, we want as much z momentumas possible
                 counts+=1
-        print("found rewards")
+        #print("found rewards")
         return reward,counts
     
     def step(self,action):
@@ -83,6 +83,7 @@ class MagneticOptimizationEnv(gym.Env):
         q = ELEMENTARY_CHARGE
         Ekin = 10*ONE_EV
         #print("time to trace particles")
+        counts=0
         try:
             res_tys,res_phi_hits=trace_particles(field,self.start_positions,self.start_velocities,mass=m,charge=q,Ekin=Ekin,mode="full",forget_exact_path=True,
                                                 stopping_criteria=[MaxZStoppingCriterion(1),MinZStoppingCriterion(0), MaxRStoppingCriterion(self.radius)])
@@ -90,6 +91,7 @@ class MagneticOptimizationEnv(gym.Env):
             #print("successfully traced particles :)))")
             observation=[rt[-1][1:] for rt in res_tys]
             reward,counts=self.calculate_reward(observation)
+            #print(f"reward: {reward}")
         except RuntimeError:
             reward=0
             self.runtime_error_count+=1
@@ -115,14 +117,14 @@ if __name__=="__main__":
     #target_values=[[0.5,0.5,float(z)/10, 0,0,1] for z in range(10)] 
     print("making env???")
     env=MagneticOptimizationEnv(
-        [[0,0,.1]],[1],2,1,0.25,1,0.001
+        [[0,0,.1],[0,0,.25],[0,0,.1]],[1,0.5,0.25],4,1,0.25,1,0.001
     )
-    env=DummyVecEnv([env])
+    #env=DummyVecEnv([env])
     # Train PPO agent
     print("made env")
     model = PPO("MlpPolicy", env, verbose=1)
     print("made model")
     start=time.time()
-    model.learn(total_timesteps=5)
+    model.learn(total_timesteps=50000000)
     print("errors",env.runtime_error_count)
     print(f"elapsed {time.time()-start} seconds")
