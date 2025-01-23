@@ -18,7 +18,7 @@ from simsopt.field import Current, Coil
 from simsopt.field import BiotSavart
 import matplotlib.pyplot as plt 
 from simsopt.field.tracing import MinZStoppingCriterion, MaxRStoppingCriterion,MaxZStoppingCriterion
-from stable_baselines3.common.envs import DummyVecEnv
+from stable_baselines3.common.vec_env import DummyVecEnv
 print("done importing!")
 
 class MagneticOptimizationEnv(gym.Env):
