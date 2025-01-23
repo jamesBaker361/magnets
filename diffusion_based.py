@@ -29,6 +29,11 @@ import argparse
 parser=argparse.ArgumentParser()
 parser.add_argument("max_fourier_mode",type=int,default=1)
 parser.add_argument("n_coils",type=int,default=4)
+parser.add_argument("epochs",type=int,default=10)
+parser.add_argument("n_layers",type=int,default=4)
+parser.add_argument("max_fourier_mode",type=int,default=2)
+parser.add_argument("residuals",action="store_true")
+parser.add_argument("increasing",action="store_true")
 
 
 def calculate_reward(observation:list,nozzle_radius:int):
@@ -73,42 +78,64 @@ class Denoiser(torch.nn.Module):
         self.residuals =residuals
 
         diff=n_features/n_layers
-        layer_list=[]
+        down_layer_list=[]
+        up_layer_list=[]
         prev=n_features
         for n in range(n_layers//2):
             if increasing:
                 current=prev+diff
             else:
                 current=prev-diff
-            layer_list.append(Linear(prev,current))
+            down_layer_list.append(Linear(prev,current))
             prev=current
         
         if increasing:
-            layer_list.append(Linear(prev,n_features*2))
+            self.mid_block=Linear(prev,n_features*2)
             prev=n_features*2
         else:
-            layer_list.append(Linear(prev,n_features//2))
+            self.mid_block=Linear(prev,n_features//2)
             prev=n_features//2
-
+        
 
         for n in range(n_layers//2):
             if increasing:
                 current=prev-diff
             else:
                 current=prev+diff
-            layer_list.append(Linear(prev,current))
+            up_layer_list.append(Linear(prev,current))
             prev=current
 
-        self.model=Sequential(*layer_list)
+        self.down_block=Sequential(*down_layer_list)
+        self.up_block=Sequential(*up_layer_list)
 
     def forward(self,x):
-        return self.model(x)
+        if self.residuals:
+            residual_list=[]
+            for linear in self.down_block:
+                x=linear(x)
+                residual_list.append(x)
+            x=self.mid_block(x)
+            residual_list=residual_list[::-1]
+            print("len res list",len(residual_list))
+            for i,linear in enumerate(self.up_block):
+                x=linear(x)+residual_list[i]
+        else:
+            x=self.down_block(x)
+            x=self.mid_block(x)
+            x=self.up_block(x)
+        return x
 
 
 
 
 def main(args):
-    n_features=
+    n_features=args.n_coils+args.n_coils*(1+2*args.max_fourier_mode)
+    denoiser=Denoiser(n_features,args.n_layers,args.residuals,args.increasing)
+    model_parameters=[p for p in denoiser.parameters()]
+    print(f"optimzing {len(model_parameters)} model params")
+    optimizer=torch.optim.adamw.AdamW(model_parameters)
+
+
     return
 
 if __name__=="__main__":
