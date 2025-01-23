@@ -27,13 +27,13 @@ Ekin = 10*ONE_EV
 
 import argparse
 parser=argparse.ArgumentParser()
-parser.add_argument("max_fourier_mode",type=int,default=1)
-parser.add_argument("n_coils",type=int,default=4)
-parser.add_argument("epochs",type=int,default=10)
-parser.add_argument("n_layers",type=int,default=4)
-parser.add_argument("max_fourier_mode",type=int,default=2)
-parser.add_argument("residuals",action="store_true")
-parser.add_argument("increasing",action="store_true")
+parser.add_argument("--max_fourier_mode",type=int,default=1)
+parser.add_argument("--n_coils",type=int,default=4)
+parser.add_argument("--epochs",type=int,default=10)
+parser.add_argument("--n_layers",type=int,default=4)
+parser.add_argument("--max_fourier_mode",type=int,default=2)
+parser.add_argument("--residuals",action="store_true")
+parser.add_argument("--increasing",action="store_true")
 
 
 def calculate_reward(observation:list,nozzle_radius:int):
