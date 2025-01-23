@@ -18,6 +18,7 @@ from simsopt.field import Current, Coil
 from simsopt.field import BiotSavart
 import matplotlib.pyplot as plt 
 from simsopt.field.tracing import MinZStoppingCriterion, MaxRStoppingCriterion,MaxZStoppingCriterion
+from stable_baselines3.common.envs import DummyVecEnv
 print("done importing!")
 
 class MagneticOptimizationEnv(gym.Env):
@@ -46,9 +47,7 @@ class MagneticOptimizationEnv(gym.Env):
         self.action_space=spaces.Box(low=lower_limits,high=upper_limits)
         particles_upper_limits=[1 for _ in range(3)]+[100 for _ in range(3)] #distance and velocity vectors
         particles_lower_limits=[-1 for _ in range(3)]+[-100 for _ in range(3)]
-        self.observation_space=spaces.Box(low=np.concatenate([particles_lower_limits for _ in range(n_particles)]),
-            high=np.concatenate([particles_upper_limits for _ in range(n_particles)])
-        )
+        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32)
         self.runtime_error_count=0
 
     def calculate_reward(self,observation:list):
@@ -106,10 +105,10 @@ class MagneticOptimizationEnv(gym.Env):
         info={}
         observation=np.concatenate(observation)
         
-        return observation, reward, terminated, truncated, info
+        return np.zeros(1, dtype=np.float32), reward, terminated, truncated, info
 
     def reset(self,seed):
-        return np.random.normal(0.5,size=(self.n_particles,7)),{}
+        return np.zeros(1, dtype=np.float32),{}
 
 
 if __name__=="__main__":
@@ -118,11 +117,12 @@ if __name__=="__main__":
     env=MagneticOptimizationEnv(
         [[0,0,.1]],[1],2,1,0.25,1,0.001
     )
+    env=DummyVecEnv([env])
     # Train PPO agent
     print("made env")
     model = PPO("MlpPolicy", env, verbose=1)
     print("made model")
     start=time.time()
-    model.learn(total_timesteps=2)
+    model.learn(total_timesteps=5)
     print("errors",env.runtime_error_count)
     print(f"elapsed {time.time()-start} seconds")
