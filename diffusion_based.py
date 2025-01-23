@@ -56,7 +56,7 @@ def evaluate_fourier(fourier_coefficients:list,
     coil_list=[]
     for f_c in fourier_coefficients:
         curve = CurveXYZFourier(1000, max_fourier_mode)
-        all_fourier=np.concatenate(f_c, [0 for 0 in range(2*max_fourier_mode)-1])
+        all_fourier=np.concatenate(f_c, [0 for _ in range(2*max_fourier_mode)-1])
         curve.x=all_fourier
         coil = Coil(curve, Current(AMPS)) 
         coil_list.append(coil)
@@ -134,9 +134,7 @@ def main(args):
     model_parameters=[p for p in denoiser.parameters()]
     print(f"optimzing {len(model_parameters)} model params")
     optimizer=torch.optim.adamw.AdamW(model_parameters)
-
-
-    return
+    denoiser(torch.randn((1,n_features)))
 
 if __name__=="__main__":
     args=parser.parse_args()
