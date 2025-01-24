@@ -127,4 +127,13 @@ if __name__=="__main__":
     start=time.time()
     model.learn(total_timesteps=50000000)
     print("errors",env.runtime_error_count)
+
+    observation=np.zeros(1, dtype=np.float32)
+
+    action=model.predict(observation)
+    _,reward, terminated, truncated, info=env.step(action)
+
+    print("final action",action)
+    print("final reward", reward)
+
     print(f"elapsed {time.time()-start} seconds")
