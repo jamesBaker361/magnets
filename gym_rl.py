@@ -100,8 +100,8 @@ class MagneticOptimizationEnv(gym.Env):
         reward-=regularization        
 
         terminated=False
-        if counts==self.n_particles:
-            terminated=True #maybe NOT do this?
+        '''if counts==self.n_particles:
+            terminated=True #maybe NOT do this?'''
 
         truncated=False
         info={}
