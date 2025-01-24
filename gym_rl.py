@@ -1,4 +1,4 @@
-print("began importing")
+
 import gymnasium as gym
 import torch
 from gymnasium import spaces
@@ -19,7 +19,9 @@ from simsopt.field import BiotSavart
 import matplotlib.pyplot as plt 
 from simsopt.field.tracing import MinZStoppingCriterion, MaxRStoppingCriterion,MaxZStoppingCriterion
 from stable_baselines3.common.vec_env import DummyVecEnv
-print("done importing!")
+
+
+
 
 class MagneticOptimizationEnv(gym.Env):
     def __init__(self,start_positions:list,start_velocities:list,n_coils:int,max_fourier_n:int,nozzle_radius:float,radius:float,regularization_lambda:float):
@@ -60,7 +62,7 @@ class MagneticOptimizationEnv(gym.Env):
         #print("found rewards")
         return reward,counts
     
-    def step(self,action):
+    def step(self,action,verbose=False):
 
         coil_list=[]
         regularization=0
@@ -70,9 +72,11 @@ class MagneticOptimizationEnv(gym.Env):
             fourier_amplitudes=coil_parameters[:-2]
             regularization+=self.regularization_lambda*sum([f**2 for f in fourier_amplitudes])
             z=coil_parameters[-2]
+
             new_x=np.concatenate((fourier_amplitudes, [z],[0. for _ in range(2*self.max_fourier_n)]) )
+
             curve.x =new_x  # Set Fourier amplitudes
-            coil = Coil(curve, Current(coil_parameters[-1]))  # 10 kAmpere-turns
+            coil = Coil(curve, Current(coil_parameters[-1]))  # current
             coil_list.append(coil)
         #print("made coils")
         field=BiotSavart(coil_list)
@@ -125,13 +129,14 @@ if __name__=="__main__":
     model = PPO("MlpPolicy", env, verbose=1)
     print("made model")
     start=time.time()
-    model.learn(total_timesteps=50000000)
+    model.learn(total_timesteps=5)
     print("errors",env.runtime_error_count)
 
     observation=np.zeros(1, dtype=np.float32)
 
     action=model.predict(observation)
-    _,reward, terminated, truncated, info=env.step(action)
+    print(action)
+    _,reward, terminated, truncated, info=env.step(action[0])
 
     print("final action",action)
     print("final reward", reward)
