@@ -127,7 +127,14 @@ if __name__=="__main__":
     # Train PPO agent
     print("made env")
     model = PPO("MlpPolicy", env, verbose=1)
-    print("made model")
+    observation=np.zeros(1, dtype=np.float32)
+
+    action=model.predict(observation)
+    _,reward, terminated, truncated, info=env.step(action[0])
+
+    print("initial action",action)
+    print("initial reward", reward)
+
     start=time.time()
     model.learn(total_timesteps=5)
     print("errors",env.runtime_error_count)
@@ -135,7 +142,6 @@ if __name__=="__main__":
     observation=np.zeros(1, dtype=np.float32)
 
     action=model.predict(observation)
-    print(action)
     _,reward, terminated, truncated, info=env.step(action[0])
 
     print("final action",action)
