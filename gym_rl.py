@@ -21,10 +21,13 @@ from simsopt.field.tracing import MinZStoppingCriterion, MaxRStoppingCriterion,M
 from stable_baselines3.common.vec_env import DummyVecEnv
 
 
-
+VELOCITY="velocity"
+CONFINEMENT="confinement"
 
 class MagneticOptimizationEnv(gym.Env):
-    def __init__(self,start_positions:list,start_velocities:list,n_coils:int,max_fourier_n:int,nozzle_radius:float,radius:float,regularization_lambda:float):
+    def __init__(self,start_positions:list,start_velocities:list,n_coils:int,max_fourier_n:int,
+                 nozzle_radius:float,radius:float,regularization_lambda:float,
+                 objective:str=VELOCITY):
         super(MagneticOptimizationEnv,self).__init__()
 
         start_positions=np.array(start_positions)
@@ -51,14 +54,18 @@ class MagneticOptimizationEnv(gym.Env):
         particles_lower_limits=[-1 for _ in range(3)]+[-100 for _ in range(3)]
         self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32)
         self.runtime_error_count=0
+        self.objective=objective
 
     def calculate_reward(self,observation:list):
         reward=0.0
         counts=0
-        for [x,y,z,v_x,v_y,v_z] in observation:
-            if np.linalg.norm([x,y])< self.nozzle_radius and z>=1:
-                reward+=v_z #for each particle, that is in the nozzle, we want as much z momentumas possible
-                counts+=1
+        for [t,x,y,z,v_x,v_y,v_z] in observation:
+            if self.objective==VELOCITY:
+                if np.linalg.norm([x,y])< self.nozzle_radius and z>=1:
+                    reward+=v_z #for each particle, that is in the nozzle, we want as much z momentumas possible
+                    counts+=1
+            elif self.objective==CONFINEMENT:
+                reward+=t
         #print("found rewards")
         return reward,counts
     
@@ -93,7 +100,7 @@ class MagneticOptimizationEnv(gym.Env):
                                                 stopping_criteria=[MaxZStoppingCriterion(1),MinZStoppingCriterion(0), MaxRStoppingCriterion(self.radius)])
             
             #print("successfully traced particles :)))")
-            observation=[rt[-1][1:] for rt in res_tys]
+            observation=[rt[-1] for rt in res_tys]
             reward,counts=self.calculate_reward(observation)
             #print(f"reward: {reward}")
         except RuntimeError:
