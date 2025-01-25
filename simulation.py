@@ -46,9 +46,7 @@ def objective(params,original_coeffs):
 # Parameterized Fourier functions
 def fourier(theta, coeffs,mode):
     total=coeffs[0]
-    print("coeffs", coeffs)
     for m in range(1,mode+1):
-        print(m, (2*m)-1, (2*m))
         total+=coeffs[(2*m)-1]*np.cos(m*theta)+coeffs[(2*m)]*np.sin(m*theta)
     return total
 
@@ -110,8 +108,6 @@ AMPS=1000):
             #print(f_c)
             #print([0 for _ in range(2*max_fourier_mode -1)])
             all_fourier=np.concatenate((f_c, [0 for _ in range((2*max_fourier_mode))]))
-            print("all_fourier", all_fourier)
-            print("curve.x", curve.x)
             curve.x=all_fourier
             coil = Coil(curve, Current(AMPS)) 
             coil_list.append(coil)
@@ -157,7 +153,7 @@ def main(args):
             coefficients=[]
             for initial_guess in initial_coefficients:
                 result=get_fixed_fourier(initial_guess[:-1],args.radius,theta_vals,args.max_fourier_mode)
-                print("initial guess -1",initial_guess[-1])
+                #print("initial guess -1",initial_guess[-1])
                 coefficients.append(np.concatenate((result,[initial_guess[-1]] )))
             start_positions=[]
             start_velocities=[]
@@ -172,7 +168,11 @@ def main(args):
                                                 args.objective)
             
             for r,o,vector,velocity in zip(rewards,observations,start_positions,start_velocities):
-                file.write(",".join(map(str, r+o+vector+velocity)))
+                print("o",o)
+                print("r",r)
+                print("vector",vector)
+                print("velocity",velocity)
+                file.write(",".join(map(str, r+o+vector+velocity))+"\n")
             
 
             
