@@ -123,6 +123,8 @@ AMPS=1000):
                 if np.linalg.norm([x,y])<= nozzle_radius and z>=1:
                     rewards.append(v_z) #for each particle, that is in the nozzle, we want as much z momentumas possible
                     counts+=1
+                else:
+                    rewards.append(0)
             #print("found rewards")
             elif objective==CONFINEMENT:
                 rewards.append(t)
@@ -167,6 +169,10 @@ def main(args):
                                                 args.nozzle_radius,
                                                 args.objective)
             
+            print("len rewards",len(rewards))
+            print("obs", len(observations))
+            print("stat pos",len(start_positions))
+            print("len velo", len(start_velocities))
             for r,o,vector,velocity in zip(rewards,observations,start_positions,start_velocities):
                 print("o",o)
                 print("r",r)
