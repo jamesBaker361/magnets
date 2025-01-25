@@ -19,6 +19,7 @@ from simsopt.field import BiotSavart
 import matplotlib.pyplot as plt 
 from simsopt.field.tracing import MinZStoppingCriterion, MaxRStoppingCriterion,MaxZStoppingCriterion
 from stable_baselines3.common.vec_env import DummyVecEnv
+from argparse import ArgumentParser
 
 
 VELOCITY="velocity"
@@ -27,7 +28,7 @@ CONFINEMENT="confinement"
 class MagneticOptimizationEnv(gym.Env):
     def __init__(self,start_positions:list,start_velocities:list,n_coils:int,max_fourier_n:int,
                  nozzle_radius:float,radius:float,regularization_lambda:float,
-                 objective:str=VELOCITY):
+                 objective:str):
         super(MagneticOptimizationEnv,self).__init__()
 
         start_positions=np.array(start_positions)
@@ -124,10 +125,26 @@ class MagneticOptimizationEnv(gym.Env):
         return np.zeros(1, dtype=np.float32),{}
 
 
+parser=ArgumentParser()
+parser.add_argument("--n_coils",type=int,default=4)
+parser.add_argument("--max_fourier_n",type=int,default=2)
+parser.add_argument("--radius",type=float,default=1.0)
+parser.add_argument("--nozzle_radius",type=float,default=0.25)
+parser.add_argument("--regularization_lambda",type=float,default=0.0001)
+parser.add_argument("--objective",type=str,default=VELOCITY)
+
+
 if __name__=="__main__":
 
+    args=parser.parse_args()
     env=MagneticOptimizationEnv(
-        [[0,0,.1],[0,0,.25],[0,0,.1]],[1,0.5,0.25],4,1,0.25,1,0.001
+        [[0,0,.1],[0,0,.25],[0,0,.1]],[1,0.5,0.25],
+        args.n_coils,
+        args.max_fourier_n,
+        args.nozzle_radius,
+        args.radius,
+        args.regularization_lambda,
+        args.objective
     )
 
     model = PPO("MlpPolicy", env, verbose=1)
