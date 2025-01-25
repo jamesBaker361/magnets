@@ -46,8 +46,10 @@ def objective(params,original_coeffs):
 # Parameterized Fourier functions
 def fourier(theta, coeffs,mode):
     total=coeffs[0]
+    print("coeffs", coeffs)
     for m in range(1,mode+1):
-        total+=coeffs[2*m]*np.cos(m*theta)+coeffs[(2*m)+1]*np.sin(m*theta)
+        print(m, (2*m)-1, (2*m))
+        total+=coeffs[(2*m)-1]*np.cos(m*theta)+coeffs[(2*m)]*np.sin(m*theta)
     return total
 
 
@@ -82,8 +84,11 @@ def get_fixed_fourier(initial_guess,r_min,theta_vals,mode):
     constraints = [{'type': 'ineq', 'fun': radius_constraint}]
 
     # Optimize
-    result = minimize(objective, initial_guess, constraints=constraints)
-    return result
+    result = minimize(objective, x0=initial_guess, args=(initial_guess) ,constraints=constraints)
+    print(result)
+    print(dir(result))
+
+    return result.x
 
 #uses simsopt to simulate particles to build dataset
 
@@ -102,15 +107,17 @@ AMPS=1000):
         coil_list=[]
         for f_c in fourier_coefficients:
             curve = CurveXYZFourier(1000, max_fourier_mode)
-            print(f_c)
-            print([0 for _ in range(2*max_fourier_mode -1)])
-            all_fourier=np.concatenate(f_c, [0 for _ in range((2*max_fourier_mode) -1)])
+            #print(f_c)
+            #print([0 for _ in range(2*max_fourier_mode -1)])
+            all_fourier=np.concatenate((f_c, [0 for _ in range((2*max_fourier_mode))]))
+            print("all_fourier", all_fourier)
+            print("curve.x", curve.x)
             curve.x=all_fourier
             coil = Coil(curve, Current(AMPS)) 
             coil_list.append(coil)
 
         field=BiotSavart(coil_list)
-        res_tys,res_phi_hits=trace_particles(field,start_positions,start_velocities,mass=m,charge=q,Ekin=Ekin,mode="full",forget_exact_path=True,
+        res_tys,res_phi_hits=trace_particles(field,np.array(start_positions),np.array(start_velocities),mass=m,charge=q,Ekin=Ekin,mode="full",forget_exact_path=True,
                                                     stopping_criteria=stopping_criteria)
         
         observations=[rt[-1] for rt in res_tys]
@@ -146,11 +153,12 @@ def main(args):
         file.write(f"{total_coefficients},{args.n_coils},{args.radius},{args.max_fourier_mode},{args.objective},{args.nozzle_radius},{args.n_particles}\n")
         for trial in range(n_trials):
             
-            initial_coefficients=torch.rand((args.n_coils, coeff_per_coil))
+            initial_coefficients= np.random.uniform(0,1,(args.n_coils, coeff_per_coil))
             coefficients=[]
             for initial_guess in initial_coefficients:
                 result=get_fixed_fourier(initial_guess[:-1],args.radius,theta_vals,args.max_fourier_mode)
-                coefficients.append(np.concatenate(result,initial_guess[-1] ))
+                print("initial guess -1",initial_guess[-1])
+                coefficients.append(np.concatenate((result,[initial_guess[-1]] )))
             start_positions=[]
             start_velocities=[]
             for v in range(args.n_particles):
