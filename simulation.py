@@ -83,8 +83,6 @@ def get_fixed_fourier(initial_guess,r_min,theta_vals,mode):
 
     # Optimize
     result = minimize(objective, x0=initial_guess, args=(initial_guess) ,constraints=constraints)
-    print(result)
-    print(dir(result))
 
     return result.x
 
@@ -178,7 +176,7 @@ def main(args):
                 print("r",r)
                 print("vector",vector)
                 print("velocity",velocity)
-                file.write(",".join(map(str, r+o+vector+velocity))+"\n")
+                file.write(",".join(map(str, [r]+o+vector+[velocity]))+"\n")
             
 
             
