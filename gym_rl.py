@@ -26,7 +26,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv
 class MagneticOptimizationEnv(gym.Env):
     def __init__(self,start_positions:list,start_velocities:list,n_coils:int,max_fourier_n:int,nozzle_radius:float,radius:float,regularization_lambda:float):
         super(MagneticOptimizationEnv,self).__init__()
-        print("began constucting")
+
         start_positions=np.array(start_positions)
         self.start_positions=start_positions #places where we might start a particle
         self.start_velocities=start_velocities
@@ -118,14 +118,11 @@ class MagneticOptimizationEnv(gym.Env):
 
 
 if __name__=="__main__":
-    #target_values=[[0.5,0.5,float(z)/10, 0,0,1] for z in range(10)] 
-    print("making env???")
+
     env=MagneticOptimizationEnv(
         [[0,0,.1],[0,0,.25],[0,0,.1]],[1,0.5,0.25],4,1,0.25,1,0.001
     )
-    #env=DummyVecEnv([env])
-    # Train PPO agent
-    print("made env")
+
     model = PPO("MlpPolicy", env, verbose=1)
     observation=np.zeros(1, dtype=np.float32)
 
