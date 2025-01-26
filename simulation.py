@@ -172,11 +172,7 @@ def main(args):
             print("stat pos",len(start_positions))
             print("len velo", len(start_velocities))
             for r,o,vector,velocity in zip(rewards,observations,start_positions,start_velocities):
-                print("o",o)
-                print("r",r)
-                print("vector",vector)
-                print("velocity",velocity)
-                file.write(",".join(map(str, [r]+o+vector+[velocity]))+"\n")
+                file.write(",".join(map(str,np.concatenate(([r],o,vector,[velocity],coefficients)) ) )+"\n")
             
 
             
