@@ -39,6 +39,8 @@ parser.add_argument("--radius",type=float,default=1.0,help="chamber radius- maxi
 parser.add_argument("--n_particles",type=int,default=3)
 
 
+#TODO: changeable current
+
 # Objective function to minimize the change in coefficients
 def objective(params,original_coeffs):
     return np.sum((params - original_coeffs)**2)
@@ -95,19 +97,20 @@ def evaluate_fourier(fourier_coefficients:list,
                      stopping_criteria,
                      nozzle_radius,
                      objective:str,
+                     amp_list:list,
 m = PROTON_MASS,
 q = ELEMENTARY_CHARGE,
 Ekin = 10*ONE_EV,
-AMPS=1000):
+):
         n_coils=len(fourier_coefficients)
         coil_list=[]
-        for f_c in fourier_coefficients:
+        for f_c,amps in zip(fourier_coefficients,amp_list):
             curve = CurveXYZFourier(1000, max_fourier_mode)
             #print(f_c)
             #print([0 for _ in range(2*max_fourier_mode -1)])
             all_fourier=np.concatenate((f_c, [0 for _ in range((2*max_fourier_mode))]))
             curve.x=all_fourier
-            coil = Coil(curve, Current(AMPS)) 
+            coil = Coil(curve, Current(amps)) 
             coil_list.append(coil)
 
         field=BiotSavart(coil_list)
@@ -150,6 +153,8 @@ def main(args):
         for trial in range(n_trials):
             
             initial_coefficients= np.random.uniform(0,1,(args.n_coils, coeff_per_coil))
+            amp_list=np.random.randint(1000,10000, (args.n_coils))
+            
             coefficients=[]
             for initial_guess in initial_coefficients:
                 result=get_fixed_fourier(initial_guess[:-1],args.radius,theta_vals,args.max_fourier_mode)
@@ -165,14 +170,16 @@ def main(args):
                                                 start_velocities,
                                                 stopping_criteria,
                                                 args.nozzle_radius,
-                                                args.objective)
+                                                args.objective,amp_list)
             
             print("len rewards",len(rewards))
             print("obs", len(observations))
             print("stat pos",len(start_positions))
             print("len velo", len(start_velocities))
-            for r,o,vector,velocity in zip(rewards,observations,start_positions,start_velocities):
-                file.write(",".join(map(str,np.concatenate(([r],o,vector,[velocity],coefficients)) ) )+"\n")
+            print("len coeffi",len(coefficients))
+            coefficients=np.concatenate(coefficients)
+            for r,o,vector,velocity in zip(rewards,observations,start_positions,start_velocities,):
+                file.write(",".join(map(str,np.concatenate(([r],o,vector,[velocity],coefficients,amp_list)) ) )+"\n")
             
 
             
