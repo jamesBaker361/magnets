@@ -4,7 +4,7 @@ import torch
 from gymnasium import spaces
 import numpy as np
 from scipy.optimize import minimize_scalar
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO,SAC,TD3
 import time
 from simsopt.field import ToroidalField, InterpolatedField
 from simsopt.geo import CurveXYZFourier
@@ -18,8 +18,10 @@ from simsopt.field import Current, Coil
 from simsopt.field import BiotSavart
 import matplotlib.pyplot as plt 
 from simsopt.field.tracing import MinZStoppingCriterion, MaxRStoppingCriterion,MaxZStoppingCriterion
+from stable_baselines3.common.noise import NormalActionNoise, OrnsteinUhlenbeckActionNoise
 from stable_baselines3.common.vec_env import DummyVecEnv
 from argparse import ArgumentParser
+from static_globals import EKIN
 
 
 VELOCITY="velocity"
@@ -43,9 +45,9 @@ class MagneticOptimizationEnv(gym.Env):
         self.regularization_lambda=regularization_lambda
 
         self.parameters_per_coil=2+(4*max_fourier_n)+2 #constant x,y + cos,sin for each mode x,y + z + current
-        upper_limits_per_coil=[1.0,1.0]+[1.0 for _ in range(4*max_fourier_n)] +[1.0]+[10000]
+        upper_limits_per_coil=[2.0,2.0]+[2.0 for _ in range(4*max_fourier_n)] +[2.0]+[100000]
         upper_limits=np.concatenate([upper_limits_per_coil for _ in range(n_coils)])
-        lower_limits_per_coil=[0.,0.]+[0.0 for _ in range(4*max_fourier_n)]+[0.]+[100]
+        lower_limits_per_coil=[0.,0.]+[0.0 for _ in range(4*max_fourier_n)]+[-2]+[100]
         lower_limits=np.concatenate([lower_limits_per_coil for _ in range(n_coils)])
 
         
@@ -93,11 +95,10 @@ class MagneticOptimizationEnv(gym.Env):
         #print("interpolated field")
         m = PROTON_MASS
         q = ELEMENTARY_CHARGE
-        Ekin = 10*ONE_EV
         #print("time to trace particles")
         counts=0
         try:
-            res_tys,res_phi_hits=trace_particles(field,self.start_positions,self.start_velocities,mass=m,charge=q,Ekin=Ekin,mode="full",forget_exact_path=True,
+            res_tys,res_phi_hits=trace_particles(field,self.start_positions,self.start_velocities,mass=m,charge=q,Ekin=EKIN,mode="full",forget_exact_path=True,
                                                 stopping_criteria=[MaxZStoppingCriterion(1),MinZStoppingCriterion(0), MaxRStoppingCriterion(self.radius)])
             
             #print("successfully traced particles :)))")
@@ -132,6 +133,8 @@ parser.add_argument("--radius",type=float,default=1.0)
 parser.add_argument("--nozzle_radius",type=float,default=0.25)
 parser.add_argument("--regularization_lambda",type=float,default=0.0001)
 parser.add_argument("--objective",type=str,default=VELOCITY)
+parser.add_argument("--timesteps",type=int,default=5000000)
+parser.add_argument("--rl_algorithm",type=str,default="PPO")
 
 
 if __name__=="__main__":
@@ -147,7 +150,15 @@ if __name__=="__main__":
         args.objective
     )
 
-    model = PPO("MlpPolicy", env, verbose=1)
+    if args.rl_algorithm=="PPO":
+
+        model = PPO("MlpPolicy", env, verbose=1)
+    elif args.rl_algorithm=="SAC":
+        model = SAC("MlpPolicy", env, verbose=1)
+    elif args.rl_algorithm=="TD3":
+        n_actions = env.action_space.shape[-1]
+        action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
+        model = TD3("MlpPolicy", env, action_noise=action_noise, verbose=1)
     observation=np.zeros(1, dtype=np.float32)
 
     action=model.predict(observation)
@@ -157,7 +168,7 @@ if __name__=="__main__":
     print("initial reward", reward)
 
     start=time.time()
-    model.learn(total_timesteps=5)
+    model.learn(total_timesteps=args.timesteps)
     print("errors",env.runtime_error_count)
 
     observation=np.zeros(1, dtype=np.float32)
