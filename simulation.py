@@ -172,11 +172,11 @@ def main(args):
                                                 args.nozzle_radius,
                                                 args.objective,amp_list)
             
-            print("len rewards",len(rewards))
+            '''print("len rewards",len(rewards))
             print("obs", len(observations))
             print("stat pos",len(start_positions))
             print("len velo", len(start_velocities))
-            print("len coeffi",len(coefficients))
+            print("len coeffi",len(coefficients))'''
             coefficients=np.concatenate(coefficients)
             for r,o,vector,velocity in zip(rewards,observations,start_positions,start_velocities,):
                 file.write(",".join(map(str,np.concatenate(([r],o,vector,[velocity],coefficients,amp_list)) ) )+"\n")
