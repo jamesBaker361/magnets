@@ -26,6 +26,8 @@ from static_globals import EKIN
 
 VELOCITY="velocity"
 CONFINEMENT="confinement"
+Z_MIN=0
+Z_MAX=2.5
 
 class MagneticOptimizationEnv(gym.Env):
     def __init__(self,start_positions:list,start_velocities:list,n_coils:int,max_fourier_n:int,
@@ -45,9 +47,9 @@ class MagneticOptimizationEnv(gym.Env):
         self.regularization_lambda=regularization_lambda
 
         self.parameters_per_coil=2+(4*max_fourier_n)+2 #constant x,y + cos,sin for each mode x,y + z + current
-        upper_limits_per_coil=[2.0,2.0]+[2.0 for _ in range(4*max_fourier_n)] +[2.0]+[100000]
+        upper_limits_per_coil=[2.0,2.0]+[2.0 for _ in range(4*max_fourier_n)] +[Z_MAX]+[100000]
         upper_limits=np.concatenate([upper_limits_per_coil for _ in range(n_coils)])
-        lower_limits_per_coil=[0.,0.]+[0.0 for _ in range(4*max_fourier_n)]+[-2]+[100]
+        lower_limits_per_coil=[0.,0.]+[0.0 for _ in range(4*max_fourier_n)]+[Z_MIN]+[100]
         lower_limits=np.concatenate([lower_limits_per_coil for _ in range(n_coils)])
 
         
@@ -64,8 +66,8 @@ class MagneticOptimizationEnv(gym.Env):
         counts=0
         for [t,x,y,z,v_x,v_y,v_z] in observation:
             if self.objective==VELOCITY:
-                if np.linalg.norm([x,y])< self.nozzle_radius and z>=1:
-                    reward+=v_z #for each particle, that is in the nozzle, we want as much z momentumas possible
+                if np.linalg.norm([x,y])< self.nozzle_radius and z<Z_MIN:
+                    reward+=-v_z #for each particle, that is in the nozzle, we want as much z momentumas possible
                     counts+=1
             elif self.objective==CONFINEMENT:
                 reward+=t
@@ -99,7 +101,7 @@ class MagneticOptimizationEnv(gym.Env):
         counts=0
         try:
             res_tys,res_phi_hits=trace_particles(field,self.start_positions,self.start_velocities,mass=m,charge=q,Ekin=EKIN,mode="full",forget_exact_path=True,
-                                                stopping_criteria=[MaxZStoppingCriterion(1),MinZStoppingCriterion(0), MaxRStoppingCriterion(self.radius)])
+                                                stopping_criteria=[MaxZStoppingCriterion(Z_MAX),MinZStoppingCriterion(Z_MIN), MaxRStoppingCriterion(self.radius)])
             
             #print("successfully traced particles :)))")
             observation=[rt[-1] for rt in res_tys]
@@ -140,8 +142,9 @@ parser.add_argument("--rl_algorithm",type=str,default="PPO")
 if __name__=="__main__":
 
     args=parser.parse_args()
+    start_height=float(Z_MAX-Z_MIN)*0.8
     env=MagneticOptimizationEnv(
-        [[0,0,.1],[0,0,.25],[0,0,.1]],[1,0.5,0.25],
+        [[0,0,start_height],[0,0.1,start_height],[0,0.25,start_height]],[1,1,1],
         args.n_coils,
         args.max_fourier_n,
         args.nozzle_radius,
