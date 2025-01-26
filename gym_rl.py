@@ -21,13 +21,10 @@ from simsopt.field.tracing import MinZStoppingCriterion, MaxRStoppingCriterion,M
 from stable_baselines3.common.noise import NormalActionNoise, OrnsteinUhlenbeckActionNoise
 from stable_baselines3.common.vec_env import DummyVecEnv
 from argparse import ArgumentParser
-from static_globals import EKIN
+from static_globals import *
 
 
-VELOCITY="velocity"
-CONFINEMENT="confinement"
-Z_MIN=0
-Z_MAX=2.5
+
 
 class MagneticOptimizationEnv(gym.Env):
     def __init__(self,start_positions:list,start_velocities:list,n_coils:int,max_fourier_n:int,
