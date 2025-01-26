@@ -40,6 +40,7 @@ class SimulationModel(torch.nn.Module):
 def training_loop(args):
     input_data=[]
     output_data=[]
+    files_used=0
     for directory in args.src_dir_list:
         csv_files = [file for file in os.listdir(directory) if file.endswith('.csv')]
         for file_path in csv_files:
@@ -50,6 +51,7 @@ def training_loop(args):
                 n_coils=int(n_coils)
                 max_fourier_mode=int(max_fourier_mode)
                 if args.n_coils==n_coils and args.max_fourier_mode==max_fourier_mode:
+                    files_used+=1
                     for line in csv_file:
                         row=line.strip().split(",")
                         reward=row[0]
@@ -57,20 +59,23 @@ def training_loop(args):
                         vector=[float(v) for v in row[8:11]]
                         velocity=[float(row[11])]
                         coefficients=[float(c) for c in row[12:12+total_coefficients]]
-                        assert len(coefficients)==len(total_coefficients)
+                        assert len(coefficients)==total_coefficients
                         amps=[float(a) for a in row[12+total_coefficients:]]
                         assert len(amps)==args.n_coils
                         input_data.append(np.concatenate([vector,velocity,coefficients,amps]))
                         output_data.append(observation)
-    input_data_batched=[torch.tensor(input_data[i:i+args.batch_size]) for i in range(0,len(input_data),args.batch_size)]
-    output_data_batched=[torch.tensor(output_data[o:o+args.batch_size]) for o in range(0,len(output_data),args.batch_size)]
+    
+    print(f"used {files_used} files")
+    input_data_batched=[torch.tensor(input_data[i:i+args.batch_size],dtype=torch.float32) for i in range(0,len(input_data),args.batch_size)]
+    output_data_batched=[torch.tensor(output_data[o:o+args.batch_size],dtype=torch.float32) for o in range(0,len(output_data),args.batch_size)]
     test_limit=int(0.1*len(input_data_batched))
     test_input_data_batched=input_data_batched[:test_limit]
     input_data_batched=input_data_batched[test_limit:]
     test_output_data_batched=output_data_batched[:test_limit]
     output_data_batched=output_data_batched[test_limit:]
 
-    sim_model=SimulationModel(total_coefficients+n_coils,7,args.n_layers)
+    input_dim=4+total_coefficients+n_coils
+    sim_model=SimulationModel(input_dim,7,args.n_layers).to(torch.float32)
 
     optimizer=torch.optim.AdamW([p for p in sim_model.parameters()])
     criterion=torch.nn.MSELoss(reduction='mean')
@@ -90,10 +95,17 @@ def training_loop(args):
     
 
     torch.save(sim_model.state_dict(), os.path.join(SAVE_MODEL_PATH, f"{args.name}.pth"))
-    config={"input_dim":total_coefficients+n_coils, "output_dim":7,"n_layers":args.n_layers}
+    config={"input_dim":input_dim, "output_dim":7,"n_layers":args.n_layers}
 
     with open(os.path.join(SAVE_MODEL_PATH,f"{args.name}.json"), "w") as json_file:
         json.dump(config, json_file, indent=4)
+
+    test_loss=[]
+    for input_batch,output_batch in zip(test_input_data_batched,test_output_data_batched):
+        predicted=sim_model(input_batch)
+        loss=criterion(predicted,output_batch)
+        test_loss.append(loss.detach())
+    print(f"test loss: {np.average(test_loss)}")
 
         
 
