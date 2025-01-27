@@ -98,7 +98,9 @@ class MagneticOptimizationEnv(gym.Env):
         counts=0
         try:
             res_tys,res_phi_hits=trace_particles(field,self.start_positions,self.start_velocities,mass=m,charge=q,Ekin=EKIN,mode="full",forget_exact_path=True,
-                                                stopping_criteria=[MaxZStoppingCriterion(Z_MAX),MinZStoppingCriterion(Z_MIN), MaxRStoppingCriterion(self.radius)])
+                                                stopping_criteria=[MaxZStoppingCriterion(Z_MAX),
+                                                                   MinZStoppingCriterion(Z_MIN), 
+                                                                   MaxRStoppingCriterion(self.radius)])
             
             #print("successfully traced particles :)))")
             observation=[rt[-1] for rt in res_tys]
