@@ -22,6 +22,7 @@ import gymnasium as gym
 import numpy as np
 from scipy.optimize import minimize
 import torch
+from static_globals import *
 
 parser=argparse.ArgumentParser()
 
@@ -100,7 +101,7 @@ def evaluate_fourier(fourier_coefficients:list,
                      amp_list:list,
 m = PROTON_MASS,
 q = ELEMENTARY_CHARGE,
-Ekin = 10*ONE_EV,
+Ekin = EKIN,
 ):
         n_coils=len(fourier_coefficients)
         coil_list=[]
@@ -121,8 +122,8 @@ Ekin = 10*ONE_EV,
         rewards=[]
         for [t,x,y,z,v_x,v_y,v_z] in observations:
             if objective==VELOCITY:
-                if np.linalg.norm([x,y])<= nozzle_radius and z>=1:
-                    rewards.append(v_z) #for each particle, that is in the nozzle, we want as much z momentumas possible
+                if np.linalg.norm([x,y])<= nozzle_radius and z<Z_MIN:
+                    rewards.append(-v_z) #for each particle, that is in the nozzle, we want as much z momentumas possible
                     counts+=1
                 else:
                     rewards.append(0)
@@ -142,7 +143,7 @@ def main(args):
     os.makedirs(data_folder,exist_ok=True)
     random_letters = ''.join(random.choices(string.ascii_letters, k=5))
 
-    stopping_criteria=[MaxRStoppingCriterion(args.radius),MinZStoppingCriterion(0),MaxZStoppingCriterion(1)]
+    stopping_criteria=[MaxRStoppingCriterion(args.radius),MinZStoppingCriterion(Z_MIN),MaxZStoppingCriterion(Z_MAX)]
     coeff_per_coil=2*(1+2*args.max_fourier_mode)+1
     total_coefficients=args.n_coils*coeff_per_coil
 
@@ -152,8 +153,8 @@ def main(args):
         file.write(f"{total_coefficients},{args.n_coils},{args.radius},{args.max_fourier_mode},{args.objective},{args.nozzle_radius},{args.n_particles}\n")
         for trial in range(n_trials):
             
-            initial_coefficients= np.random.uniform(0,1,(args.n_coils, coeff_per_coil))
-            amp_list=np.random.randint(1000,10000, (args.n_coils))
+            initial_coefficients= np.random.uniform(0,2.5,(args.n_coils, coeff_per_coil))
+            amp_list=np.random.randint(100,100000, (args.n_coils))
             
             coefficients=[]
             for initial_guess in initial_coefficients:

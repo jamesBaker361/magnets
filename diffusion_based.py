@@ -19,6 +19,8 @@ from simsopt.field import BiotSavart
 import matplotlib.pyplot as plt 
 from simsopt.field.tracing import MinZStoppingCriterion, MaxRStoppingCriterion,MaxZStoppingCriterion
 from torch.nn import Linear,Sequential
+import gymnasium as gym
+import numpy as np
 
 AMPS=1000
 m = PROTON_MASS
@@ -126,7 +128,9 @@ def main(args):
         coil_list=[]
         for f_c in fourier_coefficients:
             curve = CurveXYZFourier(1000, max_fourier_mode)
-            all_fourier=np.concatenate(f_c, [0 for _ in range(2*max_fourier_mode -1)])
+            print(f_c)
+            print([0 for _ in range(2*max_fourier_mode -1)])
+            all_fourier=np.concatenate(f_c, [0 for _ in range((2*max_fourier_mode) -1)])
             curve.x=all_fourier
             coil = Coil(curve, Current(AMPS)) 
             coil_list.append(coil)
@@ -141,8 +145,8 @@ def main(args):
         return reward
 
     class FourierReward(torch.nn.Module):
-        def forward(self,x_list:list):
-            rewards=[evaluate_fourier(x) for x in x_list]
+        def forward(self,x):
+            rewards=evaluate_fourier(x)
             return -rewards
         
     
