@@ -66,6 +66,7 @@ def training_loop(args):
                         output_data.append(observation)
     
     print(f"used {files_used} files")
+    print(f"found {len(input_data)} rows of data")
     input_data_batched=[torch.tensor(input_data[i:i+args.batch_size],dtype=torch.float32) for i in range(0,len(input_data),args.batch_size)]
     output_data_batched=[torch.tensor(output_data[o:o+args.batch_size],dtype=torch.float32) for o in range(0,len(output_data),args.batch_size)]
     test_limit=int(0.1*len(input_data_batched))
