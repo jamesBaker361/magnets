@@ -61,7 +61,8 @@ if __name__=="__main__":
                                 start_velocities=[1 for _ in start_positions],
                                 nozzle_radius=args.nozzle_radius,
                                 objective=args.objective,
-                                amp_list=amp_list
+                                amp_list=amp_list,
+                                stopping_criteria=stopping_criteria
                                 )
     
     lower_bounds=[0 for _ in range(total_coefficients)]+[100 for _ in range(args.n_coils)]
