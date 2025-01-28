@@ -53,8 +53,10 @@ if __name__=="__main__":
 
     # Define an objective function
     def objective(coefficients):
-        fourier_coefficients=coefficients[:-args.n_coils]
-        amp_list=coefficients[-args.n_coils:]
+        fourier_coefficients=[coefficients[:-args.n_coils]]
+        print(fourier_coefficients)
+        amp_list=[coefficients[-args.n_coils:]]
+        print(amp_list)
         return evaluate_fourier(fourier_coefficients=fourier_coefficients,
                                 max_fourier_mode=args.max_fourier_mode,
                                 start_positions=start_positions,
