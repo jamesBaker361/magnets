@@ -21,6 +21,7 @@ from simsopt.field.tracing import MinZStoppingCriterion, MaxRStoppingCriterion,M
 from torch.nn import Linear,Sequential
 import gymnasium as gym
 import numpy as np
+import csv
 
 AMPS=1000
 m = PROTON_MASS
@@ -29,8 +30,7 @@ Ekin = 10*ONE_EV
 
 import argparse
 parser=argparse.ArgumentParser()
-parser.add_argument("--max_fourier_mode",type=int,default=1)
-parser.add_argument("--n_coils",type=int,default=4)
+parser.add_argument("--csv_file",type=str,default="AFMPDT_database.csv")
 parser.add_argument("--epochs",type=int,default=10)
 parser.add_argument("--n_layers",type=int,default=4)
 parser.add_argument("--residuals",action="store_true")
@@ -39,7 +39,6 @@ parser.add_argument("--batch_size",type=int,default=4)
 parser.add_argument("--batches_per_epoch",type=int,default=20)
 parser.add_argument("--denoise_steps",type=int,default=10)
 parser.add_argument("--gradient_accumulation_steps",type=int,default=2)
-parser.add_argument("--nozzle_radius",type=float,default=0.1)
 
 
 def calculate_reward(observation:list,nozzle_radius:int):
@@ -116,58 +115,26 @@ class Denoiser(torch.nn.Module):
 
 
 def main(args):
-    max_fourier_mode=args.max_fourier_mode
-    start_positions=[[0,0,0]]
-    start_velocities=[[1]]
-    stopping_criteria=[MaxRStoppingCriterion(1),MinZStoppingCriterion(0),MaxZStoppingCriterion(1)]
-    nozzle_radius=args.nozzle_radius
-
-
-    def evaluate_fourier(fourier_coefficients:list):
-        n_coils=len(fourier_coefficients)
-        coil_list=[]
-        for f_c in fourier_coefficients:
-            curve = CurveXYZFourier(1000, max_fourier_mode)
-            print(f_c)
-            print([0 for _ in range(2*max_fourier_mode -1)])
-            all_fourier=np.concatenate(f_c, [0 for _ in range((2*max_fourier_mode) -1)])
-            curve.x=all_fourier
-            coil = Coil(curve, Current(AMPS)) 
-            coil_list.append(coil)
-
-        field=BiotSavart(coil_list)
-        res_tys,res_phi_hits=trace_particles(field,start_positions,start_velocities,mass=m,charge=q,Ekin=Ekin,mode="full",forget_exact_path=True,
-                                                    stopping_criteria=stopping_criteria)
-        
-        observation=[rt[-1][1:] for rt in res_tys]
-        reward,counts=calculate_reward(observation,nozzle_radius)
-
-        return reward
-
-    class FourierReward(torch.nn.Module):
-        def forward(self,x):
-            rewards=evaluate_fourier(x)
-            return -rewards
-        
     
-    n_features=args.n_coils+args.n_coils*(1+2*args.max_fourier_mode)
+    data=[]
+    with open(args.csv_file,"r",encoding="cp1252") as file:
+        reader = csv.reader(file)
+        first_row = next(reader)
+        for row in reader:
+            T_tot,J,B_A,mdot,error,Ra,Rc,Ra0,La,Rbi,Rbo,Lc_a,V,Pb,propellant,source,thruster,A_mat,C_mat,config,l_st=row
+    
+    n_features=len(first_row)
     denoiser=Denoiser(n_features,args.n_layers,args.residuals,args.increasing)
     model_parameters=[p for p in denoiser.parameters()]
     print(f"optimzing {len(model_parameters)} model params")
     optimizer=torch.optim.AdamW(model_parameters)
     denoiser(torch.randn((1,n_features)))
-    reward_module=FourierReward()
 
     for e in range(args.epochs):
         for b in range(args.batches_per_epoch):
             optimizer.zero_grad()
             noise=torch.randn((args.batch_size,n_features))
-            for s in range(args.denoise_steps):
-                noise=denoiser(noise)
-            loss=reward_module(noise)
-
-            loss.backward()
-            optimizer.step()
+            
 
 
         
