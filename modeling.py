@@ -5,6 +5,7 @@ import os
 import numpy as np
 import json
 import csv
+from accelerate import Accelerator
 
 parser=argparse.ArgumentParser()
 parser.add_argument("--src_dir_list",nargs="*")
@@ -18,6 +19,9 @@ parser.add_argument("--epochs",type=int,default=50)
 parser.add_argument("--n_layers",type=int,default=3)
 parser.add_argument("--name",type=str,default="model")
 parser.add_argument("--csv_file",type=str,default="AFMPDT_database.csv")
+parser.add_argument("--gradient_accumulation_steps",type=int,default=2)
+parser.add_argument("--mixed_precision",type=str,default="no")
+parser.add_argument("--project_name",type=str,default="magnet_diffusion")
 
 def batchify(input_data,batch_size):
     input_data_batched=[torch.tensor(input_data[i:i+batch_size],dtype=torch.float32) for i in range(0,len(input_data),batch_size)]
@@ -71,6 +75,14 @@ class SimulationModel(torch.nn.Module):
         return self.model(x)
     
 def training_loop(args):
+
+    accelerator = Accelerator(
+        mixed_precision=args.mixed_precision,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        log_with="wandb"
+    )
+    accelerator.init_trackers(project_name=args.project_name,config=vars(args))
+
     input_data=[]
     output_data=[]
     error_data=[]
@@ -132,10 +144,11 @@ def training_loop(args):
 
             loss_list.append(loss.detach())
         print(f" epoch {e} avg loss {np.average(loss_list)}")
+        accelerator.log({"avg_loss":np.average(loss_list)})
     
 
     torch.save(sim_model.state_dict(), os.path.join(SAVE_MODEL_PATH, f"{args.name}.pth"))
-    config={"input_dim":input_dim, "output_dim":7,"n_layers":args.n_layers}
+    config={"input_dim":input_dim, "output_dim":1,"n_layers":args.n_layers}
 
     with open(os.path.join(SAVE_MODEL_PATH,f"{args.name}.json"), "w") as json_file:
         json.dump(config, json_file, indent=4)
@@ -146,6 +159,7 @@ def training_loop(args):
         loss=criterion(predicted,output_batch)
         test_loss.append(loss.detach())
     print(f"test loss: {np.average(test_loss)}")
+    accelerator.log({"test_loss":np.average(test_loss)})
 
         
 
