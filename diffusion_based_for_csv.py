@@ -112,16 +112,50 @@ class Denoiser(torch.nn.Module):
         return x
 
 
-
+def set_to_one_hot(input_set):
+    """
+    Convert a set of unique items into a dictionary of one-hot vectors.
+    
+    Args:
+        input_set (set): A set of unique items.
+    
+    Returns:
+        dict: A dictionary where keys are the items from the set and values are one-hot vectors.
+    """
+    # Convert the set into a sorted list to ensure consistent order
+    items = sorted(input_set)
+    
+    # Create a dictionary mapping each item to its one-hot vector
+    one_hot_dict = {
+        item: [1 if i == idx else 0 for i in range(len(items))]
+        for idx, item in enumerate(items)
+    }
+    
+    return one_hot_dict
 
 def main(args):
     
     data=[]
+    propellant_class_set={}
+    A_mat_class_set={}
+    C_mat_class_set={}
+    config_class_set={}
     with open(args.csv_file,"r",encoding="cp1252") as file:
+        dict_reader=csv.DictReader(file)
+        for d_row in dict_reader:
+            propellant_class_set.add(d_row["propellant"])
+            A_mat_class_set.add(d_row["A_mat"])
+            C_mat_class_set.add(d_row["C_mat"])
+            config_class_set.add(d_row["config"])
         reader = csv.reader(file)
         first_row = next(reader)
         for row in reader:
-            T_tot,J,B_A,mdot,error,Ra,Rc,Ra0,La,Rbi,Rbo,Lc_a,V,Pb,propellant,source,thruster,A_mat,C_mat,config,l_st=row
+            quantitative=[float(d) for d in row[:15]+row[-1]]
+            T_tot,J,B_A,mdot,error,Ra,Rc,Ra0,La,Rbi,Rbo,Lc_a,V,Pb,l_st=quantitative
+            qualitative=row[15:-1]
+            propellant,source,thruster,A_mat,C_mat,config=qualitative
+        
+
     
     n_features=len(first_row)
     denoiser=Denoiser(n_features,args.n_layers,args.residuals,args.increasing)
