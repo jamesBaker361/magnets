@@ -4,6 +4,7 @@ from torch.nn import Linear,Dropout,LeakyReLU,Sequential
 import os
 import numpy as np
 import json
+import csv
 
 parser=argparse.ArgumentParser()
 parser.add_argument("--src_dir_list",nargs="*")
@@ -19,6 +20,27 @@ parser.add_argument("--name",type=str,default="model")
 
 SAVE_MODEL_PATH="/scratch/jlb638/magnet_models"
 os.makedirs(SAVE_MODEL_PATH,exist_ok=True)
+
+def set_to_one_hot(input_set):
+    """
+    Convert a set of unique items into a dictionary of one-hot vectors.
+    
+    Args:
+        input_set (set): A set of unique items.
+    
+    Returns:
+        dict: A dictionary where keys are the items from the set and values are one-hot vectors.
+    """
+    # Convert the set into a sorted list to ensure consistent order
+    items = sorted(input_set)
+    
+    # Create a dictionary mapping each item to its one-hot vector
+    one_hot_dict = {
+        item: [1 if i == idx else 0 for i in range(len(items))]
+        for idx, item in enumerate(items)
+    }
+    
+    return one_hot_dict
 
 class SimulationModel(torch.nn.Module):
     def __init__(self,input_dim:int,final_output_dim:int,n_layers:int):
@@ -38,32 +60,33 @@ class SimulationModel(torch.nn.Module):
         return self.model(x)
     
 def training_loop(args):
-    input_data=[]
-    output_data=[]
-    files_used=0
-    for directory in args.src_dir_list:
-        csv_files = [file for file in os.listdir(directory) if file.endswith('.csv')]
-        for file_path in csv_files:
-            with open(os.path.join(directory,file_path),"r") as csv_file:
-                first_line=csv_file.readline().strip()
-                [total_coefficients,n_coils,radius,max_fourier_mode,objective,nozzle_radius,n_particles]=first_line.split(",")
-                total_coefficients=int(total_coefficients)
-                n_coils=int(n_coils)
-                max_fourier_mode=int(max_fourier_mode)
-                if args.n_coils==n_coils and args.max_fourier_mode==max_fourier_mode:
-                    files_used+=1
-                    for line in csv_file:
-                        row=line.strip().split(",")
-                        reward=row[0]
-                        observation=[float(o) for o in row[1:8]]
-                        vector=[float(v) for v in row[8:11]]
-                        velocity=[float(row[11])]
-                        coefficients=[float(c) for c in row[12:12+total_coefficients]]
-                        assert len(coefficients)==total_coefficients
-                        amps=[float(a) for a in row[12+total_coefficients:]]
-                        assert len(amps)==args.n_coils
-                        input_data.append(np.concatenate([vector,velocity,coefficients,amps]))
-                        output_data.append(observation)
+    data=[]
+    thrust_data=[]
+    propellant_class_set={}
+    A_mat_class_set={}
+    C_mat_class_set={}
+    config_class_set={}
+    with open(args.csv_file,"r",encoding="cp1252") as file:
+        dict_reader=csv.DictReader(file)
+        for d_row in dict_reader:
+            propellant_class_set.add(d_row["propellant"])
+            A_mat_class_set.add(d_row["A_mat"])
+            C_mat_class_set.add(d_row["C_mat"])
+            config_class_set.add(d_row["config"])
+        propellant_dict=set_to_one_hot(propellant_class_set)
+        A_mat_dict=set_to_one_hot(A_mat_class_set)
+        C_mat_dict=set_to_one_hot(C_mat_class_set)
+        config_dict=set_to_one_hot(config_class_set)
+        reader = csv.reader(file)
+        first_row = next(reader)
+        for row in reader:
+            quantitative=[float(d) for d in row[:15]]
+            T_tot,J,B_A,mdot,error,Ra,Rc,Ra0,La,Rbi,Rbo,Lc_a,V,Pb=quantitative
+            qualitative=row[15:-1]
+            propellant,source,thruster,A_mat,C_mat,config=qualitative
+            new_row=[J,B_A,Ra,Rc,Ra0,La,Rbi,Rbo,Lc_a,V]
+            new_row=np.concatenate((new_row, propellant_dict[propellant], A_mat_dict[A_mat], C_mat_dict[C_mat], config_dict[config]))
+            data.append(new_row)
     
     print(f"used {files_used} files")
     print(f"found {len(input_data)} rows of data")
