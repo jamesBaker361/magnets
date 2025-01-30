@@ -23,6 +23,8 @@ import gymnasium as gym
 import numpy as np
 import csv
 from modeling import set_to_one_hot,float_handle_na
+from diffusers import DDIMScheduler
+from diffusers.models.embeddings import TimestepEmbedding,LabelEmbedding
 
 AMPS=1000
 m = PROTON_MASS
@@ -40,6 +42,7 @@ parser.add_argument("--batch_size",type=int,default=4)
 parser.add_argument("--batches_per_epoch",type=int,default=20)
 parser.add_argument("--denoise_steps",type=int,default=10)
 parser.add_argument("--gradient_accumulation_steps",type=int,default=2)
+parser.add_argument("--num_timesteps",type=int,default=1000)
 
 
 def calculate_reward(observation:list,nozzle_radius:int):
@@ -56,7 +59,7 @@ def calculate_reward(observation:list,nozzle_radius:int):
         
 
 class Denoiser(torch.nn.Module):
-    def __init__(self, n_features:int, n_layers:int,residuals:bool,increasing:bool):
+    def __init__(self, n_features:int, n_layers:int,residuals:bool,increasing:bool,num_classes:int):
         super().__init__()
         self.n_features=n_features
         self.n_layers=n_layers
@@ -93,6 +96,7 @@ class Denoiser(torch.nn.Module):
 
         self.down_block=Sequential(*down_layer_list)
         self.up_block=Sequential(*up_layer_list)
+        self.time_embedding_model=TimestepEmbedding(n_features,1)
 
     def forward(self,x):
         if self.residuals:
@@ -148,7 +152,6 @@ def main(args):
             data.append(new_row)
         
 
-    
     n_features=len(new_row)
     print(f"data has {n_features} features")
     denoiser=Denoiser(n_features,args.n_layers,args.residuals,args.increasing)
@@ -156,11 +159,18 @@ def main(args):
     print(f"optimzing {len(model_parameters)} model params")
     optimizer=torch.optim.AdamW(model_parameters)
     denoiser(torch.randn((1,n_features)))
+    scheduler=DDIMScheduler(num_train_timesteps=args.timesteps)
 
     for e in range(args.epochs):
         for b in range(args.batches_per_epoch):
+            input_batch=data[b]
             optimizer.zero_grad()
             noise=torch.randn((args.batch_size,n_features))
+
+            timesteps = torch.randint(0, args.timesteps, (args.batch_size,)).long()
+            alpha_t = scheduler.alphas_cumprod[timesteps].view(-1, 1, 1, 1)
+
+            noisy_input=torch.sqrt(alpha_t)*input_batch + 
             
 
 
