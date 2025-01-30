@@ -25,6 +25,8 @@ import csv
 from modeling import set_to_one_hot,float_handle_na
 from diffusers import DDIMScheduler
 from diffusers.models.embeddings import TimestepEmbedding,LabelEmbedding
+from unet_1D_with_class import Unet1DModelCLassy
+import random
 
 AMPS=1000
 m = PROTON_MASS
@@ -121,12 +123,14 @@ class Denoiser(torch.nn.Module):
 
 def main(args):
     
-    data=[]
+    input_data=[]
     thrust_data=[]
+    thruster_class_data=[]
     propellant_class_set=set()
     A_mat_class_set=set()
     C_mat_class_set=set()
     config_class_set=set()
+    thruster_class_set=set()
     with open(args.csv_file,"r",encoding="cp1252") as file:
         dict_reader=csv.DictReader(file)
         for d_row in dict_reader:
@@ -134,27 +138,34 @@ def main(args):
             A_mat_class_set.add(d_row["A_mat"])
             C_mat_class_set.add(d_row["C_mat"])
             config_class_set.add(d_row["config"])
+            thruster_class_set.add(d_row["thruster"])
         propellant_dict=set_to_one_hot(propellant_class_set)
         A_mat_dict=set_to_one_hot(A_mat_class_set)
         C_mat_dict=set_to_one_hot(C_mat_class_set)
         config_dict=set_to_one_hot(config_class_set)
+        thruster_dict=set_to_one_hot(thruster_class_set)
     with open(args.csv_file,"r",encoding="cp1252") as file:
         reader = csv.reader(file)
         first_row = next(reader)
+        data=[]
         for row in reader:
-
+            data.append(row)
+        random.shuffle(data)
+        for row in data:
             quantitative=[float_handle_na(d) for d in row[:14]]
             T_tot,J,B_A,mdot,error,Ra,Rc,Ra0,La,Rbi,Rbo,Lc_a,V,Pb=quantitative
             qualitative=row[14:-1]
             propellant,source,thruster,A_mat,C_mat,config=qualitative
             new_row=[J,B_A,Ra,Rc,Ra0,La,Rbi,Rbo,Lc_a,V]
             new_row=np.concatenate((new_row, propellant_dict[propellant], A_mat_dict[A_mat], C_mat_dict[C_mat], config_dict[config]))
-            data.append(new_row)
+            input_data.append(new_row)
+            thruster_class_data.append(thruster_dict[thruster])
         
 
     n_features=len(new_row)
     print(f"data has {n_features} features")
-    denoiser=Denoiser(n_features,args.n_layers,args.residuals,args.increasing)
+    denoiser=Unet1DModelCLassy(in_channels=n_features,out_channels=n_features,
+        use_timestep_embedding=True,use_class_embedding=True,num_classes=len(thruster_class_set))
     model_parameters=[p for p in denoiser.parameters()]
     print(f"optimzing {len(model_parameters)} model params")
     optimizer=torch.optim.AdamW(model_parameters)
@@ -163,14 +174,13 @@ def main(args):
 
     for e in range(args.epochs):
         for b in range(args.batches_per_epoch):
-            input_batch=data[b]
+            input_batch=input_data[b]
+            class_labels=thruster_class_data[b]
             optimizer.zero_grad()
             noise=torch.randn((args.batch_size,n_features))
 
             timesteps = torch.randint(0, args.timesteps, (args.batch_size,)).long()
-            alpha_t = scheduler.alphas_cumprod[timesteps].view(-1, 1, 1, 1)
-
-            noisy_input=torch.sqrt(alpha_t)*input_batch + 
+            
             
 
 
