@@ -134,6 +134,7 @@ def main(args):
         A_mat_dict=set_to_one_hot(A_mat_class_set)
         C_mat_dict=set_to_one_hot(C_mat_class_set)
         config_dict=set_to_one_hot(config_class_set)
+    with open(args.csv_file,"r",encoding="cp1252") as file:
         reader = csv.reader(file)
         first_row = next(reader)
         for row in reader:
