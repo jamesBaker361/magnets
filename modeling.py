@@ -17,6 +17,7 @@ parser.add_argument("--test_fraction",type=float,default=0.1)
 parser.add_argument("--epochs",type=int,default=50)
 parser.add_argument("--n_layers",type=int,default=3)
 parser.add_argument("--name",type=str,default="model")
+parser.add_argument("--csv_file",type=str,default="AFMPDT_database.csv")
 
 SAVE_MODEL_PATH="/scratch/jlb638/magnet_models"
 os.makedirs(SAVE_MODEL_PATH,exist_ok=True)
@@ -60,8 +61,9 @@ class SimulationModel(torch.nn.Module):
         return self.model(x)
     
 def training_loop(args):
-    data=[]
-    thrust_data=[]
+    input_data=[]
+    output_data=[]
+    error_data=[]
     propellant_class_set={}
     A_mat_class_set={}
     C_mat_class_set={}
@@ -86,9 +88,11 @@ def training_loop(args):
             propellant,source,thruster,A_mat,C_mat,config=qualitative
             new_row=[J,B_A,Ra,Rc,Ra0,La,Rbi,Rbo,Lc_a,V]
             new_row=np.concatenate((new_row, propellant_dict[propellant], A_mat_dict[A_mat], C_mat_dict[C_mat], config_dict[config]))
-            data.append(new_row)
+            input_data.append(new_row)
+            output_data.append(T_tot)
+            error_data.append(error)
     
-    print(f"used {files_used} files")
+
     print(f"found {len(input_data)} rows of data")
     input_data_batched=[torch.tensor(input_data[i:i+args.batch_size],dtype=torch.float32) for i in range(0,len(input_data),args.batch_size)]
     output_data_batched=[torch.tensor(output_data[o:o+args.batch_size],dtype=torch.float32) for o in range(0,len(output_data),args.batch_size)]
@@ -98,8 +102,9 @@ def training_loop(args):
     test_output_data_batched=output_data_batched[:test_limit]
     output_data_batched=output_data_batched[test_limit:]
 
-    input_dim=4+total_coefficients+n_coils
-    sim_model=SimulationModel(input_dim,7,args.n_layers).to(torch.float32)
+    input_dim=len(new_row)
+    
+    sim_model=SimulationModel(input_dim,1,args.n_layers).to(torch.float32)
 
     optimizer=torch.optim.AdamW([p for p in sim_model.parameters()])
     criterion=torch.nn.MSELoss(reduction='mean')
