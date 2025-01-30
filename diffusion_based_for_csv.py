@@ -22,7 +22,7 @@ from torch.nn import Linear,Sequential
 import gymnasium as gym
 import numpy as np
 import csv
-from modeling import set_to_one_hot
+from modeling import set_to_one_hot,float_handle_na
 
 AMPS=1000
 m = PROTON_MASS
@@ -138,7 +138,8 @@ def main(args):
         reader = csv.reader(file)
         first_row = next(reader)
         for row in reader:
-            quantitative=[float(d) for d in row[:14]]
+
+            quantitative=[float_handle_na(d) for d in row[:14]]
             T_tot,J,B_A,mdot,error,Ra,Rc,Ra0,La,Rbi,Rbo,Lc_a,V,Pb=quantitative
             qualitative=row[14:-1]
             propellant,source,thruster,A_mat,C_mat,config=qualitative

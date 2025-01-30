@@ -43,6 +43,12 @@ def set_to_one_hot(input_set):
     
     return one_hot_dict
 
+def float_handle_na(d):
+    try:
+        return float(d)
+    except:
+        return 0.
+
 class SimulationModel(torch.nn.Module):
     def __init__(self,input_dim:int,final_output_dim:int,n_layers:int):
         super().__init__()
@@ -82,7 +88,7 @@ def training_loop(args):
         reader = csv.reader(file)
         first_row = next(reader)
         for row in reader:
-            quantitative=[float(d) for d in row[:14]]
+            quantitative=[float_handle_na(d) for d in row[:14]]
             T_tot,J,B_A,mdot,error,Ra,Rc,Ra0,La,Rbi,Rbo,Lc_a,V,Pb=quantitative
             qualitative=row[14:-1]
             propellant,source,thruster,A_mat,C_mat,config=qualitative
