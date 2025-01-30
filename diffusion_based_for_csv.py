@@ -27,6 +27,9 @@ from diffusers import DDIMScheduler
 from diffusers.models.embeddings import TimestepEmbedding,LabelEmbedding
 from unet_1D_with_class import Unet1DModelCLassy
 import random
+from modeling import batchify
+import torch.nn.functional as F
+from accelerate import Accelerator
 
 AMPS=1000
 m = PROTON_MASS
@@ -45,6 +48,7 @@ parser.add_argument("--batches_per_epoch",type=int,default=20)
 parser.add_argument("--denoise_steps",type=int,default=10)
 parser.add_argument("--gradient_accumulation_steps",type=int,default=2)
 parser.add_argument("--num_timesteps",type=int,default=1000)
+parser.add_argument("--mixed_precision",type=str,default="no")
 
 
 def calculate_reward(observation:list,nozzle_radius:int):
@@ -122,6 +126,13 @@ class Denoiser(torch.nn.Module):
 
 
 def main(args):
+
+    accelerator = Accelerator(
+        mixed_precision=args.mixed_precision,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        log_with="wandb",
+        project_config=vars(args)
+    )
     
     input_data=[]
     thrust_data=[]
@@ -169,10 +180,15 @@ def main(args):
     model_parameters=[p for p in denoiser.parameters()]
     print(f"optimzing {len(model_parameters)} model params")
     optimizer=torch.optim.AdamW(model_parameters)
-    denoiser(torch.randn((1,n_features)))
     scheduler=DDIMScheduler(num_train_timesteps=args.timesteps)
 
+    optimizer,scheduler,denoiser=accelerator.prepare(optimizer,scheduler,denoiser)
+    input_data=batchify(input_data,args.batch_size)
+    thruster_class_data=batchify(thruster_class_data)
+
     for e in range(args.epochs):
+        start=time.time()
+        loss_list=[]
         for b in range(args.batches_per_epoch):
             input_batch=input_data[b]
             class_labels=thruster_class_data[b]
@@ -180,9 +196,30 @@ def main(args):
             noise=torch.randn((args.batch_size,n_features))
 
             timesteps = torch.randint(0, args.timesteps, (args.batch_size,)).long()
+
+            noisy_inputs=scheduler.add_noise(input_batch,noise,timesteps)
             
             
 
+            with accelerator.accumulate(denoiser):
+                # Predict the noise residual
+                noise_pred=denoiser(noisy_inputs,timesteps,class_labels,return_dict=False)[0]
+                loss = F.mse_loss(noise_pred, noise)
+                accelerator.backward(loss)
+
+                if accelerator.sync_gradients:
+                    accelerator.clip_grad_norm_(denoiser.parameters(), 1.0)
+                optimizer.step()
+                optimizer.zero_grad()
+
+            logs = {"loss": loss.detach().item()}
+            loss_list.append(loss.detach().item())
+            accelerator.log(logs)
+        end=time.time()
+        avg_loss=np.mean(loss_list)
+        print(f"epoch {e} elapsed {end-start} seconds avg loss {avg_loss} ")
+        accelerator.log({"average loss":avg_loss})
+    
 
         
 
