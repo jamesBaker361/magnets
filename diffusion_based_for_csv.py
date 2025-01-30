@@ -22,6 +22,7 @@ from torch.nn import Linear,Sequential
 import gymnasium as gym
 import numpy as np
 import csv
+from modeling import set_to_one_hot
 
 AMPS=1000
 m = PROTON_MASS
@@ -112,30 +113,12 @@ class Denoiser(torch.nn.Module):
         return x
 
 
-def set_to_one_hot(input_set):
-    """
-    Convert a set of unique items into a dictionary of one-hot vectors.
-    
-    Args:
-        input_set (set): A set of unique items.
-    
-    Returns:
-        dict: A dictionary where keys are the items from the set and values are one-hot vectors.
-    """
-    # Convert the set into a sorted list to ensure consistent order
-    items = sorted(input_set)
-    
-    # Create a dictionary mapping each item to its one-hot vector
-    one_hot_dict = {
-        item: [1 if i == idx else 0 for i in range(len(items))]
-        for idx, item in enumerate(items)
-    }
-    
-    return one_hot_dict
+
 
 def main(args):
     
     data=[]
+    thrust_data=[]
     propellant_class_set={}
     A_mat_class_set={}
     C_mat_class_set={}
@@ -147,17 +130,24 @@ def main(args):
             A_mat_class_set.add(d_row["A_mat"])
             C_mat_class_set.add(d_row["C_mat"])
             config_class_set.add(d_row["config"])
+        propellant_dict=set_to_one_hot(propellant_class_set)
+        A_mat_dict=set_to_one_hot(A_mat_class_set)
+        C_mat_dict=set_to_one_hot(C_mat_class_set)
+        config_dict=set_to_one_hot(config_class_set)
         reader = csv.reader(file)
         first_row = next(reader)
         for row in reader:
-            quantitative=[float(d) for d in row[:15]+row[-1]]
-            T_tot,J,B_A,mdot,error,Ra,Rc,Ra0,La,Rbi,Rbo,Lc_a,V,Pb,l_st=quantitative
+            quantitative=[float(d) for d in row[:15]]
+            T_tot,J,B_A,mdot,error,Ra,Rc,Ra0,La,Rbi,Rbo,Lc_a,V,Pb=quantitative
             qualitative=row[15:-1]
             propellant,source,thruster,A_mat,C_mat,config=qualitative
+            new_row=[J,B_A,Ra,Rc,Ra0,La,Rbi,Rbo,Lc_a,V]
+            new_row=np.concatenate((new_row, propellant_dict[propellant], A_mat_dict[A_mat], C_mat_dict[C_mat], config_dict[config]))
+            data.append(new_row)
         
 
     
-    n_features=len(first_row)
+    n_features=len(new_row)
     denoiser=Denoiser(n_features,args.n_layers,args.residuals,args.increasing)
     model_parameters=[p for p in denoiser.parameters()]
     print(f"optimzing {len(model_parameters)} model params")
