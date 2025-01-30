@@ -49,6 +49,8 @@ parser.add_argument("--denoise_steps",type=int,default=10)
 parser.add_argument("--gradient_accumulation_steps",type=int,default=2)
 parser.add_argument("--num_timesteps",type=int,default=1000)
 parser.add_argument("--mixed_precision",type=str,default="no")
+parser.add_argument("--save_path")
+parser.add_argument("--project_name",type=str,default="magnet_diffusion")
 
 
 def calculate_reward(observation:list,nozzle_radius:int):
@@ -130,18 +132,18 @@ def main(args):
     accelerator = Accelerator(
         mixed_precision=args.mixed_precision,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
-        log_with="wandb",
-        project_config=vars(args)
+        log_with="wandb"
     )
+    accelerator.init_trackers(project_name=args.project_name,config=vars(args))
     
     input_data=[]
     thrust_data=[]
-    thruster_class_data=[]
+    config_class_data=[]
     propellant_class_set=set()
     A_mat_class_set=set()
     C_mat_class_set=set()
     config_class_set=set()
-    thruster_class_set=set()
+    config_class_set=set()
     with open(args.csv_file,"r",encoding="cp1252") as file:
         dict_reader=csv.DictReader(file)
         for d_row in dict_reader:
@@ -149,12 +151,12 @@ def main(args):
             A_mat_class_set.add(d_row["A_mat"])
             C_mat_class_set.add(d_row["C_mat"])
             config_class_set.add(d_row["config"])
-            thruster_class_set.add(d_row["thruster"])
+            config_class_set.add(d_row["thruster"])
         propellant_dict=set_to_one_hot(propellant_class_set)
         A_mat_dict=set_to_one_hot(A_mat_class_set)
         C_mat_dict=set_to_one_hot(C_mat_class_set)
         config_dict=set_to_one_hot(config_class_set)
-        thruster_dict=set_to_one_hot(thruster_class_set)
+        config_dict=set_to_one_hot(config_class_set)
     with open(args.csv_file,"r",encoding="cp1252") as file:
         reader = csv.reader(file)
         first_row = next(reader)
@@ -168,15 +170,15 @@ def main(args):
             qualitative=row[14:-1]
             propellant,source,thruster,A_mat,C_mat,config=qualitative
             new_row=[J,B_A,Ra,Rc,Ra0,La,Rbi,Rbo,Lc_a,V]
-            new_row=np.concatenate((new_row, propellant_dict[propellant], A_mat_dict[A_mat], C_mat_dict[C_mat], config_dict[config]))
+            new_row=np.concatenate((new_row, propellant_dict[propellant], A_mat_dict[A_mat], C_mat_dict[C_mat]))
             input_data.append(new_row)
-            thruster_class_data.append(thruster_dict[thruster])
+            config_class_data.append(config_dict[config])
         
 
     n_features=len(new_row)
     print(f"data has {n_features} features")
     denoiser=Unet1DModelCLassy(in_channels=n_features,out_channels=n_features,
-        use_timestep_embedding=True,use_class_embedding=True,num_classes=len(thruster_class_set))
+        use_timestep_embedding=True,use_class_embedding=True,num_classes=len(config_class_set))
     model_parameters=[p for p in denoiser.parameters()]
     print(f"optimzing {len(model_parameters)} model params")
     optimizer=torch.optim.AdamW(model_parameters)
@@ -184,14 +186,14 @@ def main(args):
 
     optimizer,scheduler,denoiser=accelerator.prepare(optimizer,scheduler,denoiser)
     input_data=batchify(input_data,args.batch_size)
-    thruster_class_data=batchify(thruster_class_data)
+    config_class_data=batchify(config_class_data)
 
     for e in range(args.epochs):
         start=time.time()
         loss_list=[]
         for b in range(args.batches_per_epoch):
             input_batch=input_data[b]
-            class_labels=thruster_class_data[b]
+            class_labels=config_class_data[b]
             optimizer.zero_grad()
             noise=torch.randn((args.batch_size,n_features))
 
