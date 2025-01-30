@@ -82,9 +82,9 @@ def training_loop(args):
         reader = csv.reader(file)
         first_row = next(reader)
         for row in reader:
-            quantitative=[float(d) for d in row[:15]]
+            quantitative=[float(d) for d in row[:14]]
             T_tot,J,B_A,mdot,error,Ra,Rc,Ra0,La,Rbi,Rbo,Lc_a,V,Pb=quantitative
-            qualitative=row[15:-1]
+            qualitative=row[14:-1]
             propellant,source,thruster,A_mat,C_mat,config=qualitative
             new_row=[J,B_A,Ra,Rc,Ra0,La,Rbi,Rbo,Lc_a,V]
             new_row=np.concatenate((new_row, propellant_dict[propellant], A_mat_dict[A_mat], C_mat_dict[C_mat], config_dict[config]))
