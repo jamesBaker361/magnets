@@ -19,6 +19,10 @@ parser.add_argument("--n_layers",type=int,default=3)
 parser.add_argument("--name",type=str,default="model")
 parser.add_argument("--csv_file",type=str,default="AFMPDT_database.csv")
 
+def batchify(input_data,batch_size):
+    input_data_batched=[torch.tensor(input_data[i:i+batch_size],dtype=torch.float32) for i in range(0,len(input_data),batch_size)]
+    return input_data_batched
+
 SAVE_MODEL_PATH="/scratch/jlb638/magnet_models"
 os.makedirs(SAVE_MODEL_PATH,exist_ok=True)
 
@@ -100,8 +104,9 @@ def training_loop(args):
     
 
     print(f"found {len(input_data)} rows of data")
-    input_data_batched=[torch.tensor(input_data[i:i+args.batch_size],dtype=torch.float32) for i in range(0,len(input_data),args.batch_size)]
-    output_data_batched=[torch.tensor(output_data[o:o+args.batch_size],dtype=torch.float32) for o in range(0,len(output_data),args.batch_size)]
+
+    input_data_batched=batchify(input_data,args.batch_size)
+    output_data_batched=batchify(output_data,args.batch_size)
     test_limit=int(0.1*len(input_data_batched))
     test_input_data_batched=input_data_batched[:test_limit]
     input_data_batched=input_data_batched[test_limit:]
