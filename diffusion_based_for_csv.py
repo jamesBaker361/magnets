@@ -150,6 +150,7 @@ def main(args):
 
     
     n_features=len(new_row)
+    print(f"data has {n_features} features")
     denoiser=Denoiser(n_features,args.n_layers,args.residuals,args.increasing)
     model_parameters=[p for p in denoiser.parameters()]
     print(f"optimzing {len(model_parameters)} model params")
