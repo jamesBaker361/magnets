@@ -149,7 +149,7 @@ def main(args):
 
     optimizer,scheduler,denoiser=accelerator.prepare(optimizer,scheduler,denoiser)
     input_data=batchify(input_data,args.batch_size)
-    config_class_data=batchify(config_class_data)
+    config_class_data=batchify(config_class_data,args.batch_size)
 
     for e in range(args.epochs):
         start=time.time()
