@@ -59,7 +59,6 @@ class Unet1DModelCLassy(UNet1DModel):
             timesteps = timesteps[None].to(sample.device)
 
         timestep_embed = self.time_proj(timesteps)
-        print(timestep_embed.shape)
         if self.config.use_timestep_embedding:
             timestep_embed = self.time_mlp(timestep_embed.to(sample.dtype))
         else:
