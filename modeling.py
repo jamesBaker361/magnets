@@ -16,7 +16,7 @@ parser.add_argument("--name",type=str,default="model")
 parser.add_argument("--csv_file",type=str,default="AFMPDT_database.csv")
 parser.add_argument("--gradient_accumulation_steps",type=int,default=2)
 parser.add_argument("--mixed_precision",type=str,default="no")
-parser.add_argument("--project_name",type=str,default="magnet_diffusion")
+parser.add_argument("--project_name",type=str,default="thrust_modeling")
 
 def batchify(input_data,batch_size):
     input_data_batched=[torch.tensor(input_data[i:i+batch_size],dtype=torch.float32) for i in range(0,len(input_data),batch_size)]
