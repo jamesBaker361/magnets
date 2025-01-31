@@ -156,7 +156,7 @@ def main(args):
         loss_list=[]
         for b in range(args.batches_per_epoch):
             input_batch=input_data[b]
-            class_labels=config_class_data[b]
+            class_labels=config_class_data[b].long()
             optimizer.zero_grad()
             noise=torch.randn((args.batch_size,n_features))
 
