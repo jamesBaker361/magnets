@@ -23,8 +23,14 @@ class Unet1DModelCLassy(UNet1DModel):
         super().__init__(sample_size, sample_rate, in_channels, out_channels, extra_in_channels, time_embedding_type, flip_sin_to_cos, use_timestep_embedding, freq_shift, down_block_types, up_block_types, mid_block_type, out_block_type, block_out_channels, act_fn, norm_num_groups, layers_per_block, downsample_each_block)
         
         if time_embedding_type == "fourier":
+            self.time_proj = GaussianFourierProjection(
+                embedding_size=block_out_channels[0], set_W_to_weight=False, log=False, flip_sin_to_cos=flip_sin_to_cos
+            )
             timestep_input_dim = 2 * block_out_channels[0]
         elif time_embedding_type == "positional":
+            self.time_proj = Timesteps(
+                block_out_channels[0], flip_sin_to_cos=flip_sin_to_cos, downscale_freq_shift=freq_shift
+            )
             timestep_input_dim = block_out_channels[0]
         self.use_class_embedding=use_class_embedding
         if use_timestep_embedding and use_class_embedding:
@@ -53,6 +59,7 @@ class Unet1DModelCLassy(UNet1DModel):
             timesteps = timesteps[None].to(sample.device)
 
         timestep_embed = self.time_proj(timesteps)
+        print(timestep_embed.shape)
         if self.config.use_timestep_embedding:
             timestep_embed = self.time_mlp(timestep_embed.to(sample.dtype))
         else:
