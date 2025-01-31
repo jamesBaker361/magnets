@@ -30,6 +30,7 @@ import random
 from modeling import batchify
 import torch.nn.functional as F
 from accelerate import Accelerator
+from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion import retrieve_timesteps
 
 AMPS=1000
 m = PROTON_MASS
@@ -47,10 +48,13 @@ parser.add_argument("--batch_size",type=int,default=4)
 parser.add_argument("--batches_per_epoch",type=int,default=20)
 parser.add_argument("--denoise_steps",type=int,default=10)
 parser.add_argument("--gradient_accumulation_steps",type=int,default=2)
-parser.add_argument("--num_timesteps",type=int,default=1000)
+parser.add_argument("--timesteps",type=int,default=1000)
 parser.add_argument("--mixed_precision",type=str,default="no")
 parser.add_argument("--project_name",type=str,default="magnet_diffusion")
 parser.add_argument("--minimize",action="store_true")
+parser.add_argument("--inference_steps",type=int,default=10)
+parser.add_argument("--optimization_samples",type=int,default=10)
+#parser.add_argument("--pretraining_penalty",action="store_true",help="whether to do the penalty during pretraining")
 
 
 
@@ -180,7 +184,38 @@ def main(args):
         avg_loss=np.mean(loss_list)
         print(f"epoch {e} elapsed {end-start} seconds avg loss {avg_loss} ")
         accelerator.log({"average loss":avg_loss})
-    
+
+    for s in range(args.optimization_samples):
+        vector=torch.randn((1,n_features))
+        random_index = torch.randint(0, len(config_class_set), (1,)).item()
+
+        # Create a one-hot vector
+        class_labels = torch.zeros(len(config_class_set))
+        class_labels[random_index] = 1
+        class_labels=class_labels.unsqueeze(0)
+        start=time.time()
+        with accelerator.accumulate(denoiser):
+            optimizer.zero_grad()
+            timesteps, num_inference_steps = retrieve_timesteps(
+                scheduler, args.inference_steps,
+            )
+            for i,t in enumerate(timesteps):
+                vector_input=scheduler.scale_model_input(vector,t)
+
+                noise_pred=denoiser(vector_input,t,class_labels,return_dict=False)[0]
+
+                vector = scheduler.step(noise_pred, t, vector, return_dict=False)[0]
+
+            loss=calculate_penalty(vector,args.minimize)
+            accelerator.backward(loss)
+
+            if accelerator.sync_gradients:
+                accelerator.clip_grad_norm_(denoiser.parameters(), 1.0)
+            optimizer.step()
+            optimizer.zero_grad()
+        end=time.time()
+        print(f" sample {s} elpased {end-start} seconds loss = {loss.detach().item()}")
+
 
         
 
