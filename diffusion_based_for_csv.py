@@ -49,7 +49,6 @@ parser.add_argument("--denoise_steps",type=int,default=10)
 parser.add_argument("--gradient_accumulation_steps",type=int,default=2)
 parser.add_argument("--num_timesteps",type=int,default=1000)
 parser.add_argument("--mixed_precision",type=str,default="no")
-parser.add_argument("--save_path")
 parser.add_argument("--project_name",type=str,default="magnet_diffusion")
 
 
@@ -62,69 +61,6 @@ def calculate_reward(observation:list,nozzle_radius:int):
             counts+=1
     #print("found rewards")
     return reward,counts
-
-
-        
-
-class Denoiser(torch.nn.Module):
-    def __init__(self, n_features:int, n_layers:int,residuals:bool,increasing:bool,num_classes:int):
-        super().__init__()
-        self.n_features=n_features
-        self.n_layers=n_layers
-        self.residuals =residuals
-
-        diff=n_features/n_layers
-        down_layer_list=[]
-        up_layer_list=[]
-        prev=n_features
-        for n in range(n_layers//2):
-            if increasing:
-                current=prev+diff
-            else:
-                current=prev-diff
-            
-            down_layer_list.append(Linear(int(prev),int(current)))
-            prev=current
-        
-        if increasing:
-            self.mid_block=Linear(int(prev),int(n_features*2))
-            prev=n_features*2
-        else:
-            self.mid_block=Linear(int(prev),int(n_features//2))
-            prev=n_features//2
-        
-
-        for n in range(n_layers//2):
-            if increasing:
-                current=prev-diff
-            else:
-                current=prev+diff
-            up_layer_list.append(Linear(int(prev),int(current)))
-            prev=current
-
-        self.down_block=Sequential(*down_layer_list)
-        self.up_block=Sequential(*up_layer_list)
-        self.time_embedding_model=TimestepEmbedding(n_features,1)
-
-    def forward(self,x):
-        if self.residuals:
-            residual_list=[]
-            for linear in self.down_block:
-                x=linear(x)
-                residual_list.append(x)
-            x=self.mid_block(x)
-            residual_list=residual_list[::-1]
-            print("len res list",len(residual_list))
-            for i,linear in enumerate(self.up_block):
-                
-                x=linear(x +residual_list[i])
-        else:
-            x=self.down_block(x)
-            x=self.mid_block(x)
-            x=self.up_block(x)
-        return x
-
-
 
 
 def main(args):
