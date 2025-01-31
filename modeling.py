@@ -81,10 +81,10 @@ def training_loop(args):
     input_data=[]
     output_data=[]
     error_data=[]
-    propellant_class_set={}
-    A_mat_class_set={}
-    C_mat_class_set={}
-    config_class_set={}
+    propellant_class_set=set()
+    A_mat_class_set=set()
+    C_mat_class_set=set()
+    config_class_set=set()
     with open(args.csv_file,"r",encoding="cp1252") as file:
         dict_reader=csv.DictReader(file)
         for d_row in dict_reader:
