@@ -6,6 +6,7 @@ import numpy as np
 import json
 import csv
 from accelerate import Accelerator
+import random
 
 parser=argparse.ArgumentParser()
 parser.add_argument("--batch_size",type=int,default=8)
@@ -98,7 +99,12 @@ def training_loop(args):
         config_dict=set_to_one_hot(config_class_set)
     with open(args.csv_file,"r",encoding="cp1252") as file:
         reader = csv.reader(file)
+        first_row=next(reader)
+        data=[]
         for row in reader:
+            data.append(row)
+        random.shuffle(data)
+        for row in data:
             quantitative=[float_handle_na(d) for d in row[:14]]
             T_tot,J,B_A,mdot,error,Ra,Rc,Ra0,La,Rbi,Rbo,Lc_a,V,Pb=quantitative
             qualitative=row[14:-1]
