@@ -50,20 +50,20 @@ parser.add_argument("--gradient_accumulation_steps",type=int,default=2)
 parser.add_argument("--num_timesteps",type=int,default=1000)
 parser.add_argument("--mixed_precision",type=str,default="no")
 parser.add_argument("--project_name",type=str,default="magnet_diffusion")
+parser.add_argument("--minimize",action="store_true")
 
 
-def calculate_reward(observation:list,nozzle_radius:int):
-    reward=0.0
-    counts=0
-    for [x,y,z,v_x,v_y,v_z] in observation:
-        if np.linalg.norm([x,y])< nozzle_radius and z>=1:
-            reward+=v_z #for each particle, that is in the nozzle, we want as much z momentumas possible
-            counts+=1
-    #print("found rewards")
-    return reward,counts
+
+
+    
+
 
 
 def main(args):
+
+    
+
+
 
     accelerator = Accelerator(
         mixed_precision=args.mixed_precision,
@@ -106,10 +106,33 @@ def main(args):
             qualitative=row[14:-1]
             propellant,source,thruster,A_mat,C_mat,config=qualitative
             new_row=[J,B_A,Ra,Rc,Ra0,La,Rbi,Rbo,Lc_a,V]
+            n_quantitative_inputs=len(new_row)
             new_row=np.concatenate((new_row, propellant_dict[propellant], A_mat_dict[A_mat], C_mat_dict[C_mat]))
             input_data.append(new_row)
             config_class_data.append(config_dict[config])
         
+
+    class SquaredMagnitudePenalty(torch.nn.Module):
+        def __init__(self):
+            super(SquaredMagnitudePenalty, self).__init__()
+
+        def forward(self, input):
+            # Extract the first 10 values from each row
+            first_n = input[:, :n_quantitative_inputs]
+            
+            # Compute the squared magnitude (sum of squares for each row)
+            squared_magnitude = torch.sum(first_n ** 2, dim=1)
+            
+            # Return the mean penalty across the batch
+            return torch.mean(squared_magnitude)
+        
+
+    sm_penalty=SquaredMagnitudePenalty()
+    def calculate_penalty(batch:torch.Tensor,minimize):
+        if minimize:
+            penalty=sm_penalty(batch)
+        return penalty
+
 
     n_features=len(new_row)
     print(f"data has {n_features} features")
