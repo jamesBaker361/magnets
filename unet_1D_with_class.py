@@ -17,7 +17,9 @@ class Unet1DModelCLassy(UNet1DModel):
                   up_block_types:Tuple[str] = ("AttnUpBlock1D", "UpBlock1D", "UpBlock1DNoSkip")
                   , mid_block_type = "UNetMidBlock1D",
                     out_block_type = None, 
-                    block_out_channels :Tuple[int] = (32, 32, 64), act_fn = None, norm_num_groups = 8, layers_per_block = 1, downsample_each_block = False,use_class_embedding=True,num_classes:int=-1):
+                    block_out_channels :Tuple[int] = (32, 32, 64),
+                      act_fn = "swish", 
+                      norm_num_groups = 8, layers_per_block = 1, downsample_each_block = False,use_class_embedding=True,num_classes:int=-1):
         super().__init__(sample_size, sample_rate, in_channels, out_channels, extra_in_channels, time_embedding_type, flip_sin_to_cos, use_timestep_embedding, freq_shift, down_block_types, up_block_types, mid_block_type, out_block_type, block_out_channels, act_fn, norm_num_groups, layers_per_block, downsample_each_block)
         
         if time_embedding_type == "fourier":
