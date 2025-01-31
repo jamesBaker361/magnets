@@ -8,11 +8,6 @@ import csv
 from accelerate import Accelerator
 
 parser=argparse.ArgumentParser()
-parser.add_argument("--src_dir_list",nargs="*")
-parser.add_argument("--n_coils",type=int,default=4)
-parser.add_argument("--max_fourier_mode",type=int,default=2)
-parser.add_argument("--nozzle_radius",type=float,default=0.1,help="nozzle radius for velocity")
-parser.add_argument("--radius",type=float,default=1.0,help="chamber radius- maximum for particles, minimum for coils")
 parser.add_argument("--batch_size",type=int,default=8)
 parser.add_argument("--test_fraction",type=float,default=0.1)
 parser.add_argument("--epochs",type=int,default=50)
