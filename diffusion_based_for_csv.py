@@ -86,7 +86,7 @@ class Denoiser(torch.nn.Module):
             else:
                 current=prev-diff
             
-            down_layer_list.append(Sequential(  SelfAttention1d(prev),Linear(int(prev),int(current))))
+            down_layer_list.append(Sequential(  Linear(int(prev),int(current))))
             prev=current
         
         if increasing:
@@ -101,7 +101,7 @@ class Denoiser(torch.nn.Module):
                 current=prev-diff
             else:
                 current=prev+diff
-            up_layer_list.append(Sequential(  SelfAttention1d(prev),Linear(int(prev),int(current))))
+            up_layer_list.append(Sequential( Linear(int(prev),int(current))))
             prev=current
         self.down_block=down_layer_list
         self.up_block=up_layer_list
@@ -126,7 +126,7 @@ class Denoiser(torch.nn.Module):
         self.class_embedding=torch.nn.Embedding(num_classes,embedding_size//2)
 
         self.linear_in=Linear(n_features+embedding_size,hidden_state_size)
-        self.linear_out=Sequential(  SelfAttention1d(hidden_state_size+embedding_size),Linear(hidden_state_size+embedding_size,n_features))
+        self.linear_out=Sequential(  Linear(hidden_state_size+embedding_size,n_features))
     def forward(self,x,time_step, class_label):
         time_emb=self.time_mlp(self.time_proj(time_step))
         class_emb=self.class_embedding(class_label)
