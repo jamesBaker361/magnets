@@ -295,7 +295,7 @@ def main(args):
             for i,t in enumerate(timesteps):
                 vector_input=scheduler.scale_model_input(vector,t)
 
-                noise_pred=denoiser(vector_input,t,class_labels,return_dict=False)[0]
+                noise_pred=denoiser(vector_input,t,class_labels)
 
                 vector = scheduler.step(noise_pred, t, vector, return_dict=False)[0]
 
