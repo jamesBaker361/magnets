@@ -18,6 +18,7 @@ from simsopt.field import Current, Coil
 from simsopt.field import BiotSavart
 import matplotlib.pyplot as plt 
 from simsopt.field.tracing import MinZStoppingCriterion, MaxRStoppingCriterion,MaxZStoppingCriterion
+from diffusers.models.embeddings import GaussianFourierProjection, TimestepEmbedding, Timesteps
 from torch.nn import Linear,Sequential
 import gymnasium as gym
 import numpy as np
@@ -31,6 +32,8 @@ from modeling import batchify
 import torch.nn.functional as F
 from accelerate import Accelerator
 from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion import retrieve_timesteps
+from diffusers.models.unets.unet_1d_blocks import get_mid_block, get_out_block, get_up_block,Downsample1d,ResConvBlock,SelfAttention1d,DownBlockType,DownBlock1D,DownBlock1DNoSkip,DownResnetBlock1D
+from torch.nn import ModuleList
 
 AMPS=1000
 m = PROTON_MASS
@@ -58,7 +61,96 @@ parser.add_argument("--optimization_samples",type=int,default=10)
 
 
 
+class Denoiser(torch.nn.Module):
+    def __init__(self, n_features:int, n_layers:int,residuals:bool,increasing:bool,
+                 num_classes:int,
+                 time_embedding_type:str= "fourier",
+                 embedding_size:int=32, #size of class + time embeddding
+                 use_class_embedding:bool=True,
+                 flip_sin_to_cos:bool=True,
+                 use_timestep_embedding:bool=True,
+                 act_fn = "swish",
+                 freq_shift:int=0,
+                 hidden_state_size:int=32):
+        super().__init__()
+        self.n_features=n_features
+        self.n_layers=n_layers
+        self.residuals =residuals
+        diff=n_features/n_layers
+        down_layer_list=[]
+        up_layer_list=[]
+        prev=hidden_state_size
+        for n in range(n_layers//2):
+            if increasing:
+                current=prev+diff
+            else:
+                current=prev-diff
+            
+            down_layer_list.append(ModuleList(  [SelfAttention1d(prev),Linear(int(prev),int(current))]))
+            prev=current
+        
+        if increasing:
+            self.mid_block=Linear(int(prev),int(hidden_state_size*2))
+            prev=hidden_state_size*2
+        else:
+            self.mid_block=Linear(int(prev),int(hidden_state_size//2))
+            prev=hidden_state_size//2
+        
+        for n in range(n_layers//2):
+            if increasing:
+                current=prev-diff
+            else:
+                current=prev+diff
+            up_layer_list.append(ModuleList(  [SelfAttention1d(prev),Linear(int(prev),int(current))]))
+            prev=current
+        self.down_block=Sequential(*down_layer_list)
+        self.up_block=Sequential(*up_layer_list)
+        if time_embedding_type == "fourier":
+            self.time_proj = GaussianFourierProjection(
+                embedding_size=embedding_size, set_W_to_weight=False, log=False, flip_sin_to_cos=flip_sin_to_cos
+            )
+            timestep_input_dim = 2 * embedding_size
+        elif time_embedding_type == "positional":
+            self.time_proj = Timesteps(
+               embedding_size, flip_sin_to_cos=flip_sin_to_cos, downscale_freq_shift=freq_shift
+            )
+            timestep_input_dim = embedding_size
+        self.use_class_embedding=use_class_embedding
+        time_embed_dim = embedding_size * 4
+        self.time_mlp = TimestepEmbedding(
+            in_channels=timestep_input_dim,
+            time_embed_dim=time_embed_dim,
+            act_fn=act_fn,
+            out_dim=embedding_size//2,
+        )
+        self.class_embedding=torch.nn.Embedding(num_classes,embedding_size//2)
 
+        self.linear_in=Linear(n_features+embedding_size,hidden_state_size)
+        self.linear_out=torch.nn.ModuleList(  [SelfAttention1d(hidden_state_size+embedding_size),Linear(hidden_state_size+embedding_size,n_features)])
+    def forward(self,x,time_step, class_label):
+        time_emb=self.time_mlp(self.time_proj(time_step))
+        class_emb=self.class_embedding(class_label)
+        x=torch.cat([x,class_emb,time_emb],dim=-1)
+
+        x=self.linear_in(x)
+
+        if self.residuals:
+            residual_list=[]
+            for linear in self.down_block:
+                x=linear(x)
+                residual_list.append(x)
+            x=self.mid_block(x)
+            residual_list=residual_list[::-1]
+            print("len res list",len(residual_list))
+            for i,linear in enumerate(self.up_block):
+                
+                x=linear(x +residual_list[i])
+        else:
+            x=self.down_block(x)
+            x=self.mid_block(x)
+            x=self.up_block(x)
+        x=self.linear_out(x)
+        return x
     
 
 
@@ -96,7 +188,7 @@ def main(args):
         A_mat_dict=set_to_one_hot(A_mat_class_set)
         C_mat_dict=set_to_one_hot(C_mat_class_set)
         config_dict=set_to_one_hot(config_class_set)
-        config_dict=set_to_one_hot(config_class_set)
+        config_dict={label:index for index,label in enumerate(config_class_set)}
     with open(args.csv_file,"r",encoding="cp1252") as file:
         reader = csv.reader(file)
         first_row = next(reader)
@@ -140,8 +232,8 @@ def main(args):
 
     n_features=len(new_row)
     print(f"data has {n_features} features")
-    denoiser=Unet1DModelCLassy(in_channels=n_features,out_channels=n_features,
-        use_timestep_embedding=True,use_class_embedding=True,num_classes=len(config_class_set))
+    denoiser=Denoiser(n_features,3,True,True,len(config_class_set))
+    
     model_parameters=[p for p in denoiser.parameters()]
     print(f"optimzing {len(model_parameters)} model params")
     optimizer=torch.optim.AdamW(model_parameters)
@@ -163,6 +255,7 @@ def main(args):
             timesteps = torch.randint(0, args.timesteps, (args.batch_size,)).long()
 
             noisy_inputs=scheduler.add_noise(input_batch,noise,timesteps)
+
             
             
 
