@@ -87,14 +87,15 @@ class Denoiser(torch.nn.Module):
                 current=prev-diff
             
             down_layer_list.append(Sequential(  Linear(int(prev),int(current))))
+            print("down layer",prev,current)
             prev=current
         
-        if increasing:
+        '''if increasing:
             self.mid_block=Linear(int(prev),int(hidden_state_size*2))
             prev=hidden_state_size*2
         else:
             self.mid_block=Linear(int(prev),int(hidden_state_size//2))
-            prev=hidden_state_size//2
+            prev=hidden_state_size//2'''
         
         for n in range(n_layers//2):
             if increasing:
@@ -102,6 +103,7 @@ class Denoiser(torch.nn.Module):
             else:
                 current=prev+diff
             up_layer_list.append(Sequential( Linear(int(prev),int(current))))
+            print("up layer ",prev,current)
             prev=current
         self.down_block=down_layer_list
         self.up_block=up_layer_list
@@ -126,7 +128,7 @@ class Denoiser(torch.nn.Module):
         self.class_embedding=torch.nn.Embedding(num_classes,embedding_size//2)
 
         self.linear_in=Linear(n_features+embedding_size,hidden_state_size)
-        self.linear_out=Sequential(  Linear(hidden_state_size+embedding_size,n_features))
+        self.linear_out=Sequential(  Linear(hidden_state_size,n_features))
     def forward(self,x,time_step, class_label):
         time_emb=self.time_mlp(self.time_proj(time_step))
         class_emb=self.class_embedding(class_label)
@@ -137,14 +139,15 @@ class Denoiser(torch.nn.Module):
         if self.residuals:
             residual_list=[]
             for linear in self.down_block:
-                x=linear(x)
                 residual_list.append(x)
-            x=self.mid_block(x)
+                x=linear(x)
+                
+            #x=self.mid_block(x)
             residual_list=residual_list[::-1]
-            print("len res list",len(residual_list))
             for i,linear in enumerate(self.up_block):
                 
-                x=linear(x +residual_list[i])
+                x=linear(x)
+                x=x+residual_list[i]
         else:
             x=self.down_block(x)
             x=self.mid_block(x)
@@ -232,7 +235,7 @@ def main(args):
 
     n_features=len(new_row)
     print(f"data has {n_features} features")
-    denoiser=Denoiser(n_features,3,True,True,len(config_class_set))
+    denoiser=Denoiser(n_features,4,True,True,len(config_class_set))
     
     model_parameters=[p for p in denoiser.parameters()]
     print(f"optimzing {len(model_parameters)} model params")
@@ -285,7 +288,7 @@ def main(args):
         # Create a one-hot vector
         class_labels = torch.zeros(len(config_class_set))
         class_labels[random_index] = 1
-        class_labels=class_labels.unsqueeze(0)
+        class_labels=torch.randint(0, len(config_class_set), (1,)).long()
         start=time.time()
         with accelerator.accumulate(denoiser):
             optimizer.zero_grad()
@@ -293,6 +296,7 @@ def main(args):
                 scheduler, args.inference_steps,
             )
             for i,t in enumerate(timesteps):
+                t=t.unsqueeze(0).long()
                 vector_input=scheduler.scale_model_input(vector,t)
 
                 noise_pred=denoiser(vector_input,t,class_labels)
