@@ -28,23 +28,27 @@ from diffusers import DDIMScheduler
 from diffusers.models.embeddings import TimestepEmbedding,LabelEmbedding
 from unet_1D_with_class import Unet1DModelCLassy
 import random
-from modeling import batchify
+from modeling import batchify,SimulationModel,SAVE_MODEL_PATH
 import torch.nn.functional as F
 from accelerate import Accelerator
 from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion import retrieve_timesteps
 from diffusers.models.unets.unet_1d_blocks import get_mid_block, get_out_block, get_up_block,Downsample1d,ResConvBlock,SelfAttention1d,DownBlockType,DownBlock1D,DownBlock1DNoSkip,DownResnetBlock1D
 from torch.nn import ModuleList,Sequential
+import os
+
 
 AMPS=1000
 m = PROTON_MASS
 q = ELEMENTARY_CHARGE
 Ekin = 10*ONE_EV
+PRESSURE=1 #pressure in low earth orbit
 
 import argparse
 parser=argparse.ArgumentParser()
 parser.add_argument("--csv_file",type=str,default="AFMPDT_database.csv")
 parser.add_argument("--epochs",type=int,default=10)
 parser.add_argument("--n_layers",type=int,default=4)
+parser.add_argument("--n_layers_simulation_model",type=int,default=3)
 parser.add_argument("--residuals",action="store_true")
 parser.add_argument("--increasing",action="store_true")
 parser.add_argument("--batch_size",type=int,default=4)
@@ -57,6 +61,7 @@ parser.add_argument("--project_name",type=str,default="magnet_diffusion")
 parser.add_argument("--minimize",action="store_true")
 parser.add_argument("--inference_steps",type=int,default=10)
 parser.add_argument("--optimization_samples",type=int,default=10)
+parser.add_argument("--simulation_model_name",type=str,default="name")
 #parser.add_argument("--pretraining_penalty",action="store_true",help="whether to do the penalty during pretraining")
 
 
@@ -158,11 +163,7 @@ class Denoiser(torch.nn.Module):
 
 
 def main(args):
-
     
-
-
-
     accelerator = Accelerator(
         mixed_precision=args.mixed_precision,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
@@ -189,7 +190,7 @@ def main(args):
         propellant_dict=set_to_one_hot(propellant_class_set)
         A_mat_dict=set_to_one_hot(A_mat_class_set)
         C_mat_dict=set_to_one_hot(C_mat_class_set)
-        config_dict=set_to_one_hot(config_class_set)
+        penalty_config_dict=set_to_one_hot(config_class_set)
         config_dict={label:index for index,label in enumerate(config_class_set)}
     with open(args.csv_file,"r",encoding="cp1252") as file:
         reader = csv.reader(file)
@@ -225,10 +226,35 @@ def main(args):
             return torch.mean(squared_magnitude)
         
 
+    def straight_through_one_hot(x):
+        """
+        Differentiable hard one-hot encoding using Straight-Through Estimator (STE).
+        
+        Args:
+            x (Tensor): Input tensor of shape (batch, n).
+            
+        Returns:
+            Tensor: Hard one-hot encoded tensor with gradients.
+        """
+        soft = F.softmax(x, dim=-1)  # Softmax for gradients
+        hard = torch.argmax(soft, dim=-1)  # Hard decision
+        one_hot = F.one_hot(hard, num_classes=x.shape[-1]).float()  # One-hot encoding
+        
+        return (one_hot - soft).detach() + soft  # STE trick
+
+    simulation_inputs=len(new_row)+1+len(config_dict)
+    simulation_model=SimulationModel(simulation_inputs,1, args.n_layers_simulation_model)
+
+    simulation_path=os.path.join(SAVE_MODEL_PATH, f"{args.simulation_model_name}.pth")
+
+    simulation_model.load_state_dict(torch.load(simulation_path))
+
     sm_penalty=SquaredMagnitudePenalty()
-    def calculate_penalty(batch:torch.Tensor,minimize):
+    def calculate_penalty(sample:torch.Tensor,minimize):
+        quant_inputs=sample[:n_quantitative_inputs]
+        propellant=
         if minimize:
-            penalty=sm_penalty(batch)
+            penalty=sm_penalty(sample)
         return penalty
 
 
@@ -257,9 +283,6 @@ def main(args):
             timesteps = torch.randint(0, args.timesteps, (args.batch_size,)).long()
 
             noisy_inputs=scheduler.add_noise(input_batch,noise,timesteps)
-
-            
-            
 
             with accelerator.accumulate(denoiser):
                 # Predict the noise residual
