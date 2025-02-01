@@ -8,8 +8,84 @@ from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.utils import BaseOutput
 from diffusers.models.embeddings import GaussianFourierProjection, TimestepEmbedding, Timesteps
 from diffusers.models.modeling_utils import ModelMixin
-from diffusers.models.unets.unet_1d_blocks import get_down_block, get_mid_block, get_out_block, get_up_block
+from diffusers.models.unets.unet_1d_blocks import get_mid_block, get_out_block, get_up_block,Downsample1d,ResConvBlock,SelfAttention1d,DownBlockType,DownBlock1D,DownBlock1DNoSkip,DownResnetBlock1D
 from diffusers.models.unets.unet_1d import UNet1DModel, UNet1DOutput
+
+
+
+
+class AttnDownBlock1DNoPadding(nn.Module):
+    def __init__(self, out_channels: int, in_channels: int, mid_channels: Optional[int] = None):
+        super().__init__()
+        mid_channels = out_channels if mid_channels is None else mid_channels
+
+        self.down = Downsample1d("cubic")
+        resnets = [
+            ResConvBlock(in_channels, mid_channels, mid_channels),
+            ResConvBlock(mid_channels, mid_channels, mid_channels),
+            ResConvBlock(mid_channels, mid_channels, out_channels),
+        ]
+        attentions = [
+            SelfAttention1d(mid_channels, mid_channels // 32),
+            SelfAttention1d(mid_channels, mid_channels // 32),
+            SelfAttention1d(out_channels, out_channels // 32),
+        ]
+
+        self.attentions = nn.ModuleList(attentions)
+        self.resnets = nn.ModuleList(resnets)
+
+    def forward(self, hidden_states: torch.Tensor, temb: Optional[torch.Tensor] = None) -> torch.Tensor:
+        #hidden_states = self.down(hidden_states)
+
+        for resnet, attn in zip(self.resnets, self.attentions):
+            hidden_states = resnet(hidden_states)
+            hidden_states = attn(hidden_states)
+
+        return hidden_states, (hidden_states,)
+    
+class DownBlock1DNoSkip(nn.Module):
+    def __init__(self, out_channels: int, in_channels: int, mid_channels: Optional[int] = None):
+        super().__init__()
+        mid_channels = out_channels if mid_channels is None else mid_channels
+
+        resnets = [
+            ResConvBlock(in_channels, mid_channels, mid_channels),
+            ResConvBlock(mid_channels, mid_channels, mid_channels),
+            ResConvBlock(mid_channels, mid_channels, out_channels),
+        ]
+
+        self.resnets = nn.ModuleList(resnets)
+
+    def forward(self, hidden_states: torch.Tensor, temb: Optional[torch.Tensor] = None) -> torch.Tensor:
+        hidden_states = torch.cat([hidden_states, temb], dim=1)
+        for resnet in self.resnets:
+            hidden_states = resnet(hidden_states)
+
+        return hidden_states, (hidden_states,)
+    
+def get_down_block(
+    down_block_type: str,
+    num_layers: int,
+    in_channels: int,
+    out_channels: int,
+    temb_channels: int,
+    add_downsample: bool,
+) -> DownBlockType:
+    if down_block_type == "DownResnetBlock1D":
+        return DownResnetBlock1D(
+            in_channels=in_channels,
+            num_layers=num_layers,
+            out_channels=out_channels,
+            temb_channels=temb_channels,
+            add_downsample=add_downsample,
+        )
+    elif down_block_type == "DownBlock1D":
+        return DownBlock1D(out_channels=out_channels, in_channels=in_channels)
+    elif down_block_type == "AttnDownBlock1D":
+        return AttnDownBlock1DNoPadding(out_channels=out_channels, in_channels=in_channels)
+    elif down_block_type == "DownBlock1DNoSkip":
+        return DownBlock1DNoSkip(out_channels=out_channels, in_channels=in_channels)
+    raise ValueError(f"{down_block_type} does not exist.")
 
 class Unet1DModelCLassy(UNet1DModel):
     def __init__(self, sample_size = 65536, sample_rate = None, in_channels = 2, out_channels = 2, extra_in_channels = 0, time_embedding_type = "fourier", flip_sin_to_cos = True, use_timestep_embedding = False, freq_shift = 0,
@@ -43,6 +119,30 @@ class Unet1DModelCLassy(UNet1DModel):
             )
             self.class_embedding=torch.nn.Embedding(num_classes,block_out_channels[0]//2)
 
+        # down
+        output_channel = in_channels
+        for i, down_block_type in enumerate(down_block_types):
+            input_channel = output_channel
+            output_channel = block_out_channels[i]
+
+            if i == 0:
+                input_channel += extra_in_channels
+
+            is_final_block = i == len(block_out_channels) - 1
+
+            down_block = get_down_block(
+                down_block_type,
+                num_layers=layers_per_block,
+                in_channels=input_channel,
+                out_channels=output_channel,
+                temb_channels=block_out_channels[0],
+                add_downsample=not is_final_block or downsample_each_block,
+            )
+            self.down_blocks.append(down_block)
+
+
+
+
     def forward(
         self,
         sample: torch.Tensor,
@@ -73,6 +173,8 @@ class Unet1DModelCLassy(UNet1DModel):
         # 2. down
         down_block_res_samples = ()
         for downsample_block in self.down_blocks:
+            print("sample",sample.shape)
+            print("time",timestep_embed.shape)
             sample, res_samples = downsample_block(hidden_states=sample, temb=timestep_embed)
             down_block_res_samples += res_samples
 
