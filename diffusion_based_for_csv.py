@@ -261,7 +261,7 @@ def main(args):
 
             with accelerator.accumulate(denoiser):
                 # Predict the noise residual
-                noise_pred=denoiser(noisy_inputs,timesteps,class_labels,return_dict=False)[0]
+                noise_pred=denoiser(noisy_inputs,timesteps,class_labels)
                 loss = F.mse_loss(noise_pred, noise)
                 accelerator.backward(loss)
 
