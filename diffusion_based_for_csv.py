@@ -68,7 +68,6 @@ class Denoiser(torch.nn.Module):
                  embedding_size:int=32, #size of class + time embeddding
                  use_class_embedding:bool=True,
                  flip_sin_to_cos:bool=True,
-                 use_timestep_embedding:bool=True,
                  act_fn = "swish",
                  freq_shift:int=0,
                  hidden_state_size:int=32):
