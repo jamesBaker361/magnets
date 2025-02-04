@@ -36,6 +36,7 @@ from diffusers.models.unets.unet_1d_blocks import get_mid_block, get_out_block, 
 from torch.nn import ModuleList,Sequential
 import os
 import pandas as pd
+import sys
 
 
 AMPS=1000
@@ -65,6 +66,8 @@ parser.add_argument("--optimization_samples",type=int,default=10)
 parser.add_argument("--simulation_model_name",type=str,default="model_3_100")
 parser.add_argument("--no_training_optimization",action="store_true")
 parser.add_argument("--conditional",action="store_true")
+parser.add_argument("--sample_optimization",action="store_true")
+parser.add_argument("--evaluation_samples",type=int,default=20)
 #parser.add_argument("--pretraining_penalty",action="store_true",help="whether to do the penalty during pretraining")
 
 
@@ -219,12 +222,28 @@ def main(args):
         C_mat_dict[row["C_mat"]]
     )), axis=1)
 
-    df["complete"]=df.apply(lambda row: np.concatenate((
+    
+
+    df["quant"]=df.apply(lambda row: np.concatenate((
         row[["J", "mdot","B_A", "Ra", "Rc", "Ra0", "La", "Rbi", "Rbo", "Lc_a", "V", "Pb"]].values,
+    )), axis=1)
+
+    cols_to_normalize = ["J", "mdot", "B_A", "Ra", "Rc", "Ra0", "La", "Rbi", "Rbo", "Lc_a", "V", "Pb"]
+
+    # Compute mean and standard deviation for each column
+    means = df[cols_to_normalize].mean()
+    stds = df[cols_to_normalize].std()  # Standard deviation
+
+    # Normalize the columns using Z-score normalization: (x - mean) / std
+    df[cols_to_normalize] = (df[cols_to_normalize] - means) / stds
+
+    # Apply transformation and store in "complete"
+    df["complete"] = df.apply(lambda row: np.concatenate((
+        row[cols_to_normalize].values,  # Already normalized
         propellant_dict[row["propellant"]],
         A_mat_dict[row["A_mat"]],
         C_mat_dict[row["C_mat"]],
-        config_dict[row["config"]]
+        config_dict[row["config"]]  # Wrap in a list to keep shape
     )), axis=1)
 
     # Prepare input data and labels
@@ -232,7 +251,12 @@ def main(args):
     new_row=input_data[0]
     config_class_data = df["config"].map(config_int_dict).tolist()
     complete_data=df["complete"].to_list()
-        
+    quant_data=df["quant"].to_list()
+
+    #means = np.mean(quant_data, axis=0)
+    #stds = np.std(quant_data, axis=0)
+    print(complete_data[0])
+    print(quant_data[0])
     print("n propellant",len(propellant_dict))
     print("len A_mat", len(A_mat_dict))
     print("len c mat",len(C_mat_dict))
@@ -286,7 +310,22 @@ def main(args):
 
     #simulation_model.load_state_dict(torch.load(simulation_path))
 
-    def find_nearest_training_sample(sample,config)
+    def find_nearest_training_sample(sample,class_label):
+        #sample[:, :n_quantitative_inputs] = (sample[:, :n_quantitative_inputs] - means) / stds 
+        vector_sample=denoise_predictions_to_simulation_input(sample,class_label).numpy()
+        
+        vals=[]
+        for s in vector_sample:
+            for n in range(n_quantitative_inputs):
+                s[n]=(s[n]-means[n])/stds[n]
+            min_sim=sys.maxsize
+            for row in complete_data:
+                min_sim=min(min_sim,np.linalg.norm(s-row))
+        return vals
+
+        
+
+        
 
     sm_penalty=SquaredMagnitudePenalty()
     def calculate_penalty(sample:torch.Tensor,class_label,minimize):
@@ -365,7 +404,7 @@ def main(args):
 
             loss=calculate_penalty(vector,minimize=args.minimize,class_label=random_class_label)
             accelerator.backward(loss)
-
+            find_nearest_training_sample(vector.detach(),random_class_label)
             if accelerator.sync_gradients:
                 accelerator.clip_grad_norm_(denoiser.parameters(), 1.0)
             optimizer.step()
@@ -373,6 +412,30 @@ def main(args):
         end=time.time()
         print(f" sample {s} elpased {end-start} seconds loss = {loss.detach().item()}")
 
+    generated_samples=[]
+    for _ in range(args.evaluation_samples):
+        vector=torch.randn((1,n_features))
+        random_index = torch.randint(0, len(config_class_set), (1,)).item()
+
+        # Create a one-hot vector
+        random_class_label = random.choice(list(config_class_set))
+        class_labels =torch.tensor(config_int_dict[random_class_label]).unsqueeze(0).long()
+        start=time.time()
+        with accelerator.accumulate(denoiser):
+            optimizer.zero_grad()
+            timesteps, num_inference_steps = retrieve_timesteps(
+                scheduler, args.inference_steps,
+            )
+            for i,t in enumerate(timesteps):
+                t=t.unsqueeze(0).long()
+                vector_input=scheduler.scale_model_input(vector,t)
+
+                noise_pred=denoiser(vector_input,t,class_labels)
+
+                vector = scheduler.step(noise_pred, t, vector, return_dict=False)[0]
+
+            
+            generated_samples.append(vector)
 
         
 
