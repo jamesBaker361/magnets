@@ -185,10 +185,12 @@ def main(args):
     config_class_set=set()
     # Load the CSV file into a Pandas DataFrame
     df = pd.read_csv(args.csv_file, encoding="cp1252")
+    df = df.fillna("NaN") 
 
     # Extract unique class sets for categorical variables
     propellant_class_set = set(df["propellant"])
     A_mat_class_set = set(df["A_mat"])
+    print(A_mat_class_set)
     C_mat_class_set = set(df["C_mat"])
     config_class_set = set(df["config"])
 
@@ -208,7 +210,7 @@ def main(args):
     # Process quantitative data (first 14 columns)
     quantitative_columns = df.columns[:14]
     df[quantitative_columns] = df[quantitative_columns].applymap(float_handle_na)
-    n_quantitative_inputs=13
+    n_quantitative_inputs=12
     # Extract qualitative columns
     df["new_row"] = df.apply(lambda row: np.concatenate((
         row[["J", "mdot","B_A", "Ra", "Rc", "Ra0", "La", "Rbi", "Rbo", "Lc_a", "V", "Pb"]].values,
@@ -227,7 +229,7 @@ def main(args):
 
     # Prepare input data and labels
     input_data = df["new_row"].tolist()
-    new_row=len(input_data[0])
+    new_row=input_data[0]
     config_class_data = df["config"].map(config_int_dict).tolist()
         
     print("n propellant",len(propellant_dict))
