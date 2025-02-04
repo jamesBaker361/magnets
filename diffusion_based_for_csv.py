@@ -61,7 +61,8 @@ parser.add_argument("--project_name",type=str,default="magnet_diffusion")
 parser.add_argument("--minimize",action="store_true")
 parser.add_argument("--inference_steps",type=int,default=10)
 parser.add_argument("--optimization_samples",type=int,default=10)
-parser.add_argument("--simulation_model_name",type=str,default="name")
+parser.add_argument("--simulation_model_name",type=str,default="model_3_100")
+parser.add_argument("--no_training_optimization",action="store_true")
 #parser.add_argument("--pretraining_penalty",action="store_true",help="whether to do the penalty during pretraining")
 
 
@@ -159,7 +160,9 @@ class Denoiser(torch.nn.Module):
         x=self.linear_out(x)
         return x
     
-
+#TODO: binary/TF classifier for evaluation
+#diffusion conditioning
+#less class embedding stuff
 
 
 def main(args):
@@ -178,7 +181,6 @@ def main(args):
     A_mat_class_set=set()
     C_mat_class_set=set()
     config_class_set=set()
-    config_class_set=set()
     with open(args.csv_file,"r",encoding="cp1252") as file:
         dict_reader=csv.DictReader(file)
         for d_row in dict_reader:
@@ -186,7 +188,6 @@ def main(args):
             A_mat_class_set.add(d_row["A_mat"])
             C_mat_class_set.add(d_row["C_mat"])
             config_class_set.add(d_row["config"])
-            config_class_set.add(d_row["thruster"])
         propellant_dict=set_to_one_hot(propellant_class_set)
         A_mat_dict=set_to_one_hot(A_mat_class_set)
         C_mat_dict=set_to_one_hot(C_mat_class_set)
@@ -210,6 +211,9 @@ def main(args):
             input_data.append(new_row)
             config_class_data.append(config_dict[config])
         
+    print("n propellant",len(propellant_dict))
+    print("len A_mat", len(A_mat_dict))
+    print("len c mat",len(C_mat_dict))
 
     class SquaredMagnitudePenalty(torch.nn.Module):
         def __init__(self):
@@ -239,8 +243,19 @@ def main(args):
         soft = F.softmax(x, dim=-1)  # Softmax for gradients
         hard = torch.argmax(soft, dim=-1)  # Hard decision
         one_hot = F.one_hot(hard, num_classes=x.shape[-1]).float()  # One-hot encoding
-        
         return (one_hot - soft).detach() + soft  # STE trick
+    
+    def denoise_predictions_to_simulation_input(sample,class_label):
+        config=torch.tensor(penalty_config_dict[class_label]).unsqueeze(0)
+        quant_inputs=sample[:n_quantitative_inputs]
+        A_mat_start=n_quantitative_inputs+len(propellant_dict)
+        C_mat_start=A_mat_start+len(A_mat_dict)
+        quant_inputs,propellant,A_mat,C_mat=torch.split(sample,[n_quantitative_inputs, len(propellant_dict), len(A_mat_dict),len(C_mat_dict)],dim=1)
+        #print(n_quantitative_inputs, A_mat_start,C_mat_start,len(sample))
+        propellant=straight_through_one_hot(propellant)
+        A_mat=straight_through_one_hot(A_mat)
+        C_mat=straight_through_one_hot(C_mat)
+        return torch.cat([quant_inputs,torch.tensor([PRESSURE]).unsqueeze(0), propellant,A_mat,C_mat,config],dim=-1)
 
     simulation_inputs=len(new_row)+1+len(config_dict)
     simulation_model=SimulationModel(simulation_inputs,1, args.n_layers_simulation_model)
@@ -249,13 +264,15 @@ def main(args):
 
     simulation_model.load_state_dict(torch.load(simulation_path))
 
+
+
     sm_penalty=SquaredMagnitudePenalty()
-    def calculate_penalty(sample:torch.Tensor,minimize):
-        quant_inputs=sample[:n_quantitative_inputs]
-        propellant=
+    def calculate_penalty(sample:torch.Tensor,class_label,minimize):
+        simulation_tensor=denoise_predictions_to_simulation_input(sample,class_label)
+        thrust=-simulation_model(  simulation_tensor)
         if minimize:
-            penalty=sm_penalty(sample)
-        return penalty
+            thrust+=sm_penalty(sample)
+        return thrust
 
 
     n_features=len(new_row)
@@ -268,15 +285,15 @@ def main(args):
     scheduler=DDIMScheduler(num_train_timesteps=args.timesteps)
 
     optimizer,scheduler,denoiser=accelerator.prepare(optimizer,scheduler,denoiser)
-    input_data=batchify(input_data,args.batch_size)
-    config_class_data=batchify(config_class_data,args.batch_size)
+    input_data_batched=batchify(input_data,args.batch_size)
+    config_class_data_batched=batchify(config_class_data,args.batch_size)
 
     for e in range(args.epochs):
         start=time.time()
         loss_list=[]
         for b in range(args.batches_per_epoch):
-            input_batch=input_data[b]
-            class_labels=config_class_data[b].long()
+            input_batch=input_data_batched[b]
+            class_labels=config_class_data_batched[b].long()
             optimizer.zero_grad()
             noise=torch.randn((args.batch_size,n_features))
 
@@ -308,9 +325,8 @@ def main(args):
         random_index = torch.randint(0, len(config_class_set), (1,)).item()
 
         # Create a one-hot vector
-        class_labels = torch.zeros(len(config_class_set))
-        class_labels[random_index] = 1
-        class_labels=torch.randint(0, len(config_class_set), (1,)).long()
+        random_class_label = random.choice(list(config_class_set))
+        class_labels =torch.tensor(config_dict[random_class_label]).unsqueeze(0).long()
         start=time.time()
         with accelerator.accumulate(denoiser):
             optimizer.zero_grad()
@@ -325,7 +341,7 @@ def main(args):
 
                 vector = scheduler.step(noise_pred, t, vector, return_dict=False)[0]
 
-            loss=calculate_penalty(vector,args.minimize)
+            loss=calculate_penalty(vector,minimize=args.minimize,class_label=random_class_label)
             accelerator.backward(loss)
 
             if accelerator.sync_gradients:
