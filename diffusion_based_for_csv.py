@@ -231,6 +231,7 @@ def main(args):
     input_data = df["new_row"].tolist()
     new_row=input_data[0]
     config_class_data = df["config"].map(config_int_dict).tolist()
+    complete_data=df["complete"].to_list()
         
     print("n propellant",len(propellant_dict))
     print("len A_mat", len(A_mat_dict))
@@ -276,16 +277,16 @@ def main(args):
         propellant=straight_through_one_hot(propellant)
         A_mat=straight_through_one_hot(A_mat)
         C_mat=straight_through_one_hot(C_mat)
-        return torch.cat([quant_inputs,torch.tensor([PRESSURE]).unsqueeze(0), propellant,A_mat,C_mat,config],dim=-1)
+        return torch.cat([quant_inputs, propellant,A_mat,C_mat,config],dim=-1)
 
-    simulation_inputs=len(new_row)+1+len(config_int_dict)
+    simulation_inputs=len(new_row)+len(config_int_dict)
     simulation_model=SimulationModel(simulation_inputs,1, args.n_layers_simulation_model)
 
     simulation_path=os.path.join(SAVE_MODEL_PATH, f"{args.simulation_model_name}.pth")
 
     #simulation_model.load_state_dict(torch.load(simulation_path))
 
-
+    def find_nearest_training_sample(sample,config)
 
     sm_penalty=SquaredMagnitudePenalty()
     def calculate_penalty(sample:torch.Tensor,class_label,minimize):
