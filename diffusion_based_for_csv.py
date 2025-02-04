@@ -35,6 +35,7 @@ from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion import retri
 from diffusers.models.unets.unet_1d_blocks import get_mid_block, get_out_block, get_up_block,Downsample1d,ResConvBlock,SelfAttention1d,DownBlockType,DownBlock1D,DownBlock1DNoSkip,DownResnetBlock1D
 from torch.nn import ModuleList,Sequential
 import os
+import pandas as pd
 
 
 AMPS=1000
@@ -63,6 +64,7 @@ parser.add_argument("--inference_steps",type=int,default=10)
 parser.add_argument("--optimization_samples",type=int,default=10)
 parser.add_argument("--simulation_model_name",type=str,default="model_3_100")
 parser.add_argument("--no_training_optimization",action="store_true")
+parser.add_argument("--conditional",action="store_true")
 #parser.add_argument("--pretraining_penalty",action="store_true",help="whether to do the penalty during pretraining")
 
 
@@ -181,35 +183,52 @@ def main(args):
     A_mat_class_set=set()
     C_mat_class_set=set()
     config_class_set=set()
-    with open(args.csv_file,"r",encoding="cp1252") as file:
-        dict_reader=csv.DictReader(file)
-        for d_row in dict_reader:
-            propellant_class_set.add(d_row["propellant"])
-            A_mat_class_set.add(d_row["A_mat"])
-            C_mat_class_set.add(d_row["C_mat"])
-            config_class_set.add(d_row["config"])
-        propellant_dict=set_to_one_hot(propellant_class_set)
-        A_mat_dict=set_to_one_hot(A_mat_class_set)
-        C_mat_dict=set_to_one_hot(C_mat_class_set)
-        penalty_config_dict=set_to_one_hot(config_class_set)
-        config_dict={label:index for index,label in enumerate(config_class_set)}
-    with open(args.csv_file,"r",encoding="cp1252") as file:
-        reader = csv.reader(file)
-        first_row = next(reader)
-        data=[]
-        for row in reader:
-            data.append(row)
-        random.shuffle(data)
-        for row in data:
-            quantitative=[float_handle_na(d) for d in row[:14]]
-            T_tot,J,B_A,mdot,error,Ra,Rc,Ra0,La,Rbi,Rbo,Lc_a,V,Pb=quantitative
-            qualitative=row[14:-1]
-            propellant,source,thruster,A_mat,C_mat,config=qualitative
-            new_row=[J,B_A,Ra,Rc,Ra0,La,Rbi,Rbo,Lc_a,V]
-            n_quantitative_inputs=len(new_row)
-            new_row=np.concatenate((new_row, propellant_dict[propellant], A_mat_dict[A_mat], C_mat_dict[C_mat]))
-            input_data.append(new_row)
-            config_class_data.append(config_dict[config])
+    # Load the CSV file into a Pandas DataFrame
+    df = pd.read_csv(args.csv_file, encoding="cp1252")
+
+    # Extract unique class sets for categorical variables
+    propellant_class_set = set(df["propellant"])
+    A_mat_class_set = set(df["A_mat"])
+    C_mat_class_set = set(df["C_mat"])
+    config_class_set = set(df["config"])
+
+    # Convert class sets to one-hot encoding dictionaries
+    propellant_dict = set_to_one_hot(propellant_class_set)
+    A_mat_dict = set_to_one_hot(A_mat_class_set)
+    C_mat_dict = set_to_one_hot(C_mat_class_set)
+    config_dict=set_to_one_hot(config_class_set)
+
+    # Map config classes to integer labels
+    config_int_dict = {label: index for index, label in enumerate(config_class_set)}
+
+    # Shuffle the DataFrame
+    df = df.sample(frac=1, random_state=42).reset_index(drop=True)
+
+
+    # Process quantitative data (first 14 columns)
+    quantitative_columns = df.columns[:14]
+    df[quantitative_columns] = df[quantitative_columns].applymap(float_handle_na)
+    n_quantitative_inputs=13
+    # Extract qualitative columns
+    df["new_row"] = df.apply(lambda row: np.concatenate((
+        row[["J", "mdot","B_A", "Ra", "Rc", "Ra0", "La", "Rbi", "Rbo", "Lc_a", "V", "Pb"]].values,
+        propellant_dict[row["propellant"]],
+        A_mat_dict[row["A_mat"]],
+        C_mat_dict[row["C_mat"]]
+    )), axis=1)
+
+    df["complete"]=df.apply(lambda row: np.concatenate((
+        row[["J", "mdot","B_A", "Ra", "Rc", "Ra0", "La", "Rbi", "Rbo", "Lc_a", "V", "Pb"]].values,
+        propellant_dict[row["propellant"]],
+        A_mat_dict[row["A_mat"]],
+        C_mat_dict[row["C_mat"]],
+        config_dict[row["config"]]
+    )), axis=1)
+
+    # Prepare input data and labels
+    input_data = df["new_row"].tolist()
+    new_row=len(input_data[0])
+    config_class_data = df["config"].map(config_int_dict).tolist()
         
     print("n propellant",len(propellant_dict))
     print("len A_mat", len(A_mat_dict))
@@ -246,7 +265,7 @@ def main(args):
         return (one_hot - soft).detach() + soft  # STE trick
     
     def denoise_predictions_to_simulation_input(sample,class_label):
-        config=torch.tensor(penalty_config_dict[class_label]).unsqueeze(0)
+        config=torch.tensor(config_dict[class_label]).unsqueeze(0)
         quant_inputs=sample[:n_quantitative_inputs]
         A_mat_start=n_quantitative_inputs+len(propellant_dict)
         C_mat_start=A_mat_start+len(A_mat_dict)
@@ -257,12 +276,12 @@ def main(args):
         C_mat=straight_through_one_hot(C_mat)
         return torch.cat([quant_inputs,torch.tensor([PRESSURE]).unsqueeze(0), propellant,A_mat,C_mat,config],dim=-1)
 
-    simulation_inputs=len(new_row)+1+len(config_dict)
+    simulation_inputs=len(new_row)+1+len(config_int_dict)
     simulation_model=SimulationModel(simulation_inputs,1, args.n_layers_simulation_model)
 
     simulation_path=os.path.join(SAVE_MODEL_PATH, f"{args.simulation_model_name}.pth")
 
-    simulation_model.load_state_dict(torch.load(simulation_path))
+    #simulation_model.load_state_dict(torch.load(simulation_path))
 
 
 
@@ -326,7 +345,7 @@ def main(args):
 
         # Create a one-hot vector
         random_class_label = random.choice(list(config_class_set))
-        class_labels =torch.tensor(config_dict[random_class_label]).unsqueeze(0).long()
+        class_labels =torch.tensor(config_int_dict[random_class_label]).unsqueeze(0).long()
         start=time.time()
         with accelerator.accumulate(denoiser):
             optimizer.zero_grad()
