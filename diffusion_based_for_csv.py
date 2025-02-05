@@ -214,6 +214,14 @@ def main(args):
     quantitative_columns = df.columns[:14]
     df[quantitative_columns] = df[quantitative_columns].applymap(float_handle_na)
     n_quantitative_inputs=12
+    cols_to_normalize = ["J", "mdot", "B_A", "Ra", "Rc", "Ra0", "La", "Rbi", "Rbo", "Lc_a", "V", "Pb"]
+
+    # Compute mean and standard deviation for each column
+    means = df[cols_to_normalize].mean()
+    stds = df[cols_to_normalize].std()  # Standard deviation
+
+    # Normalize the columns using Z-score normalization: (x - mean) / std
+    df[cols_to_normalize] = (df[cols_to_normalize] - means) / stds
     # Extract qualitative columns
     df["new_row"] = df.apply(lambda row: np.concatenate((
         row[["J", "mdot","B_A", "Ra", "Rc", "Ra0", "La", "Rbi", "Rbo", "Lc_a", "V", "Pb"]].values,
@@ -228,14 +236,7 @@ def main(args):
         row[["J", "mdot","B_A", "Ra", "Rc", "Ra0", "La", "Rbi", "Rbo", "Lc_a", "V", "Pb"]].values,
     )), axis=1)
 
-    cols_to_normalize = ["J", "mdot", "B_A", "Ra", "Rc", "Ra0", "La", "Rbi", "Rbo", "Lc_a", "V", "Pb"]
-
-    # Compute mean and standard deviation for each column
-    means = df[cols_to_normalize].mean()
-    stds = df[cols_to_normalize].std()  # Standard deviation
-
-    # Normalize the columns using Z-score normalization: (x - mean) / std
-    df[cols_to_normalize] = (df[cols_to_normalize] - means) / stds
+    
 
     # Apply transformation and store in "complete"
     df["complete"] = df.apply(lambda row: np.concatenate((
