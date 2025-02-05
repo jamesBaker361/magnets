@@ -7,6 +7,7 @@ import json
 import csv
 from accelerate import Accelerator
 import random
+import pandas as pd
 
 parser=argparse.ArgumentParser()
 parser.add_argument("--batch_size",type=int,default=8)
@@ -80,40 +81,70 @@ def training_loop(args):
     accelerator.init_trackers(project_name=args.project_name,config=vars(args))
 
     input_data=[]
-    output_data=[]
-    error_data=[]
+    thrust_data=[]
+    config_class_data=[]
     propellant_class_set=set()
     A_mat_class_set=set()
     C_mat_class_set=set()
     config_class_set=set()
-    with open(args.csv_file,"r",encoding="cp1252") as file:
-        dict_reader=csv.DictReader(file)
-        for d_row in dict_reader:
-            propellant_class_set.add(d_row["propellant"])
-            A_mat_class_set.add(d_row["A_mat"])
-            C_mat_class_set.add(d_row["C_mat"])
-            config_class_set.add(d_row["config"])
-        propellant_dict=set_to_one_hot(propellant_class_set)
-        A_mat_dict=set_to_one_hot(A_mat_class_set)
-        C_mat_dict=set_to_one_hot(C_mat_class_set)
-        config_dict=set_to_one_hot(config_class_set)
-    with open(args.csv_file,"r",encoding="cp1252") as file:
-        reader = csv.reader(file)
-        first_row=next(reader)
-        data=[]
-        for row in reader:
-            data.append(row)
-        random.shuffle(data)
-        for row in data:
-            quantitative=[float_handle_na(d) for d in row[:14]]
-            T_tot,J,B_A,mdot,error,Ra,Rc,Ra0,La,Rbi,Rbo,Lc_a,V,Pb=quantitative
-            qualitative=row[14:-1]
-            propellant,source,thruster,A_mat,C_mat,config=qualitative
-            new_row=[J,B_A,Ra,Rc,Ra0,La,Rbi,Rbo,Lc_a,V]
-            new_row=np.concatenate((new_row, propellant_dict[propellant], A_mat_dict[A_mat], C_mat_dict[C_mat], config_dict[config]))
-            input_data.append(new_row)
-            output_data.append(T_tot)
-            error_data.append(error)
+    # Load the CSV file into a Pandas DataFrame
+    df = pd.read_csv(args.csv_file, encoding="cp1252")
+    df = df.fillna("NaN") 
+
+    # Extract unique class sets for categorical variables
+    propellant_class_set = set(df["propellant"])
+    A_mat_class_set = set(df["A_mat"])
+    print(A_mat_class_set)
+    C_mat_class_set = set(df["C_mat"])
+    config_class_set = set(df["config"])
+
+    # Convert class sets to one-hot encoding dictionaries
+    propellant_dict = set_to_one_hot(propellant_class_set)
+    A_mat_dict = set_to_one_hot(A_mat_class_set)
+    C_mat_dict = set_to_one_hot(C_mat_class_set)
+    config_dict=set_to_one_hot(config_class_set)
+
+    # Map config classes to integer labels
+    config_int_dict = {label: index for index, label in enumerate(config_class_set)}
+
+    # Shuffle the DataFrame
+    df = df.sample(frac=1, random_state=42).reset_index(drop=True)
+
+
+    # Process quantitative data (first 14 columns)
+    quantitative_columns = df.columns[:14]
+    df[quantitative_columns] = df[quantitative_columns].applymap(float_handle_na)
+    cols_to_normalize =["T_tot","J", "mdot", "B_A", "Ra", "Rc", "Ra0", "La", "Rbi", "Rbo", "Lc_a", "V", "Pb"]
+
+    # Compute mean and standard deviation for each column
+    means = df[cols_to_normalize].mean()
+    stds = df[cols_to_normalize].std()  # Standard deviation
+
+    # Normalize the columns using Z-score normalization: (x - mean) / std
+    df[cols_to_normalize] = (df[cols_to_normalize] - means) / stds
+
+    
+
+    df["quant"]=df.apply(lambda row: np.concatenate((
+        row[["J", "mdot","B_A", "Ra", "Rc", "Ra0", "La", "Rbi", "Rbo", "Lc_a", "V", "Pb"]].values,
+    )), axis=1)
+
+    cols_to_normalize=cols_to_normalize[1:]
+    
+
+    # Apply transformation and store in "complete"
+    df["complete"] = df.apply(lambda row: np.concatenate((
+        row[cols_to_normalize].values,  # Already normalized
+        propellant_dict[row["propellant"]],
+        A_mat_dict[row["A_mat"]],
+        C_mat_dict[row["C_mat"]],
+        config_dict[row["config"]]  # Wrap in a list to keep shape
+    )), axis=1)
+
+    # Prepare input data and labels
+    input_data = df["complete"].tolist()
+    new_row=input_data[0]
+    output_data=df["T_tot"].tolist()
     
 
     print(f"found {len(input_data)} rows of data")
